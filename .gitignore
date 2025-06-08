@@ -1,0 +1,77 @@
+# IDE and editor specific files
+.idea/
+.vscode/
+*.iml
+*.project
+*.classpath
+
+# Build artifacts
+target/
+dist/
+build/
+out/
+
+# Log files
+*.log
+logs/
+
+# Dependency directories
+node_modules/
+jspm_packages/
+bower_components/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local environment configuration
+.env
+.env.local
+.env.*.local
+
+# Maven specific
+.mvn/
+mvnw
+mvnw.cmd
+
+# Gradle specific
+.gradle/
+build/
+gradle/
+gradlew
+gradlew.bat
+
+# IntelliJ specific
+*.iws
+*.ipr
+
+# Eclipse specific
+.settings/
+.project
+.classpath
+
+# NetBeans specific
+nbproject/
+build.xml
+nbbuild.xml
+
+# VS Code specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Spring Boot specific
+# (target/ is already covered)
+
+# JasperReports generated files (if any specific patterns are needed beyond temp)
+# *.jasper
+# *.jrprint
+
+# Test report PDF if generated in a specific non-temp location
+# test-report.pdf
