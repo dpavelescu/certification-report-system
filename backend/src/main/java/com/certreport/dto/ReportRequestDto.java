@@ -2,8 +2,6 @@ package com.certreport.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.NotEmpty;
 
 public class ReportRequestDto {
     @JsonProperty("reportType")

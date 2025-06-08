@@ -3,7 +3,6 @@ package com.certreport.service;
 import com.certreport.dto.EmployeeDto;
 import com.certreport.model.Employee;
 import com.certreport.repository.EmployeeRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,7 +14,6 @@ public class EmployeeService {
     
     private final EmployeeRepository employeeRepository;
     
-    @Autowired
     public EmployeeService(EmployeeRepository employeeRepository) {
         this.employeeRepository = employeeRepository;
     }

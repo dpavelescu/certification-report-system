@@ -4,6 +4,7 @@ import EmployeeTable from './EmployeeTable';
 import ReportGenerator from './ReportGenerator';
 import ReportList from './ReportList';
 import LoadingSpinner from './LoadingSpinner';
+import Button from './Button';
 
 const Dashboard: React.FC = () => {
   const {
@@ -17,9 +18,11 @@ const Dashboard: React.FC = () => {
     selectEmployee,
     deselectEmployee,
     selectAllEmployees,
-    clearSelection,
-    refreshReportStatus,
+    clearSelection,    refreshReportStatus,
     downloadReport,
+    deleteReport,
+    regenerateReport,
+    cleanupStuckReports,
     clearError
   } = useReportContext();
 
@@ -65,29 +68,58 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Employee Selection - Left Column */}
-        <div className="lg:col-span-2">
-          <EmployeeTable
-            employees={employees}
-            selectedEmployees={selectedEmployees}
-            onEmployeeSelect={selectEmployee}
-            onEmployeeDeselect={deselectEmployee}
-            onSelectAll={selectAllEmployees}
-            onClearSelection={clearSelection}
-          />
-        </div>
-
-        {/* Report Generation - Right Column */}
-        <div className="space-y-6">
-          <ReportGenerator />
+      )}      {/* Main Content - 2 Row Layout */}
+      <div className="space-y-6">
+        {/* Top Row - Employee Selection and Report Generation */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Employee Selection - 3/4 width on large screens */}
+          <div className="xl:col-span-3">
+            <EmployeeTable
+              employees={employees}
+              selectedEmployees={selectedEmployees}
+              onEmployeeSelect={selectEmployee}
+              onEmployeeDeselect={deselectEmployee}
+              onSelectAll={selectAllEmployees}
+              onClearSelection={clearSelection}
+            />
+          </div>
           
-          <ReportList
+          {/* Report Generation & Controls - 1/4 width on large screens */}
+          <div className="space-y-4">
+            <ReportGenerator />
+            
+            {/* Cleanup Controls */}
+            <div className="bg-white shadow-sm rounded-lg p-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-3">System Management</h3>
+              <div className="space-y-2">
+                <Button
+                  variant="secondary"
+                  onClick={cleanupStuckReports}
+                  disabled={loading}
+                  className="w-full text-sm"
+                >
+                  {loading ? 'Cleaning...' : 'Cleanup Stuck Reports'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={loadReports}
+                  disabled={loading}
+                  className="w-full text-sm"
+                >
+                  {loading ? 'Refreshing...' : 'Refresh Reports'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Bottom Row - Report List */}
+        <div>          <ReportList
             reports={reports}
             onRefreshStatus={refreshReportStatus}
             onDownload={downloadReport}
+            onDelete={deleteReport}
+            onRegenerate={regenerateReport}
           />
         </div>
       </div>

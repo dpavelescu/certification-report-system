@@ -1,0 +1,56 @@
+# Production Configuration Template
+# Copy this file to application-prod.properties and update with actual production values
+# DO NOT COMMIT application-prod.properties TO VERSION CONTROL
+
+# Application Configuration
+spring.application.name=certification-report-system
+server.port=${SERVER_PORT:8080}
+
+# Database Configuration (Production)
+spring.datasource.url=${DB_URL:jdbc:postgresql://prod-db-server:5432/certreport_prod}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA Configuration (Production)
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.format_sql=false
+
+# Connection Pool Configuration (Production)
+spring.datasource.hikari.maximum-pool-size=50
+spring.datasource.hikari.minimum-idle=10
+spring.datasource.hikari.connection-timeout=30000
+spring.datasource.hikari.idle-timeout=600000
+spring.datasource.hikari.max-lifetime=1800000
+spring.datasource.hikari.leak-detection-threshold=60000
+
+# Security Configuration
+server.ssl.enabled=${SSL_ENABLED:false}
+server.ssl.key-store=${SSL_KEYSTORE_PATH:}
+server.ssl.key-store-password=${SSL_KEYSTORE_PASSWORD:}
+server.ssl.key-store-type=${SSL_KEYSTORE_TYPE:PKCS12}
+
+# Actuator Configuration (Production)
+management.endpoints.web.exposure.include=health,metrics,info
+management.endpoint.health.show-details=when-authorized
+management.prometheus.metrics.export.enabled=true
+management.observations.key-values.application=certification-report-system
+management.observations.key-values.environment=${ENVIRONMENT:production}
+
+# File Upload Configuration
+spring.servlet.multipart.max-file-size=100MB
+spring.servlet.multipart.max-request-size=100MB
+
+# Logging Configuration (Production)
+logging.level.com.certreport=INFO
+logging.level.net.sf.jasperreports=WARN
+logging.level.org.springframework.web=WARN
+logging.level.org.springframework.security=WARN
+logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+
+# DevTools Configuration (Disabled in Production)
+spring.devtools.restart.enabled=false
+spring.devtools.livereload.enabled=false

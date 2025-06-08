@@ -45,18 +45,44 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(request),
     });
-  }
-
-  async getReport(id: string): Promise<Report> {
+  }  async getReport(id: string): Promise<Report> {
     return this.fetchWithErrorHandling<Report>(`/reports/${id}`);
-  }
-
-  async downloadReport(id: string): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/reports/${id}/download`);
-    if (!response.ok) {
-      throw new Error(`Download failed: ${response.statusText}`);
+  }async downloadReport(id: string): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/reports/${id}/download`);    if (!response.ok) {
+      // Try to parse error response as JSON
+      try {
+        const errorData = await response.json();
+        const errorMessage = errorData.error || `Download failed: ${response.statusText}`;
+        throw new Error(errorMessage);
+      } catch {
+        // If JSON parsing fails, use the status text
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
     }
     return response.blob();
+  }
+
+  async deleteReport(id: string): Promise<void> {
+    return this.fetchWithErrorHandling<void>(`/reports/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async cleanupStuckReports(): Promise<{ message: string; cleanedReports: number }> {
+    return this.fetchWithErrorHandling<{ message: string; cleanedReports: number }>('/reports/cleanup/stuck', {
+      method: 'POST',
+    });
+  }
+  async getReportStats(): Promise<Record<string, unknown>> {
+    return this.fetchWithErrorHandling<Record<string, unknown>>('/reports/stats');
+  }
+
+  async getPerformanceMetrics(): Promise<Record<string, unknown>> {
+    return this.fetchWithErrorHandling<Record<string, unknown>>('/metrics/performance');
+  }
+
+  async getHealthStatus(): Promise<Record<string, unknown>> {
+    return this.fetchWithErrorHandling<Record<string, unknown>>('/metrics/health');
   }
 }
 

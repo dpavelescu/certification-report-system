@@ -2,7 +2,6 @@ package com.certreport.controller;
 
 import com.certreport.dto.EmployeeDto;
 import com.certreport.service.EmployeeService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,11 +13,9 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/api/employees")
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class EmployeeController {
-    
-    private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
+      private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
     private final EmployeeService employeeService;
     
-    @Autowired
     public EmployeeController(EmployeeService employeeService) {
         this.employeeService = employeeService;
     }
