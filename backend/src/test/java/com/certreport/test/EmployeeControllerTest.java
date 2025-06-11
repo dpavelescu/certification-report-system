@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,16 +23,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Unit tests for EmployeeController
  */
 @WebMvcTest(EmployeeController.class)
-public class EmployeeControllerTest {
-
-    @Autowired
+public class EmployeeControllerTest {    @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private EmployeeService employeeService;
 
     private EmployeeDto testEmployee1;
-    private EmployeeDto testEmployee2;    @BeforeEach
+    private EmployeeDto testEmployee2;
+
+    @BeforeEach
     void setUp() {
         testEmployee1 = new EmployeeDto("EMP001", "John", "Doe", "john.doe@company.com", 
                                        "Engineering", "Software Engineer", LocalDateTime.of(2023, 1, 15, 9, 0));
