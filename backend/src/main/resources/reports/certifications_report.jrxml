@@ -2,7 +2,8 @@
 <jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
               xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports 
-              http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"              name="certifications_report" 
+              http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="certifications_report" 
               pageWidth="842" 
               pageHeight="595" 
               orientation="Landscape"
@@ -16,8 +17,9 @@
     <property name="ireport.x" value="0"/>
     <property name="ireport.y" value="0"/>
     
-    <!-- Parameters -->    <parameter name="REPORT_TITLE" class="java.lang.String" isForPrompting="false">
-        <defaultValueExpression><![CDATA["Certifications Report"]]></defaultValueExpression>
+    <!-- Parameters -->
+    <parameter name="REPORT_TITLE" class="java.lang.String" isForPrompting="false">
+        <defaultValueExpression><![CDATA["Employee Certification Report"]]></defaultValueExpression>
     </parameter>
     <parameter name="GENERATION_DATE" class="java.lang.String" isForPrompting="false"/>
     <parameter name="TOTAL_EMPLOYEES" class="java.lang.Integer" isForPrompting="false">
@@ -26,7 +28,18 @@
     <parameter name="COMPANY_NAME" class="java.lang.String" isForPrompting="false">
         <defaultValueExpression><![CDATA["CertReport Systems"]]></defaultValueExpression>
     </parameter>
-      <!-- Employee Demographics Fields (accessed through employee nested object) -->
+    <parameter name="TOTAL_CERTIFICATIONS" class="java.lang.Long" isForPrompting="false">
+        <defaultValueExpression><![CDATA[0L]]></defaultValueExpression>
+    </parameter>
+    <parameter name="COMPLETED_CERTIFICATIONS" class="java.lang.Long" isForPrompting="false">
+        <defaultValueExpression><![CDATA[0L]]></defaultValueExpression>
+    </parameter>
+    <parameter name="IN_PROGRESS_CERTIFICATIONS" class="java.lang.Long" isForPrompting="false">
+        <defaultValueExpression><![CDATA[0L]]></defaultValueExpression>
+    </parameter>
+    <parameter name="FAILED_CERTIFICATIONS" class="java.lang.Long" isForPrompting="false">
+        <defaultValueExpression><![CDATA[0L]]></defaultValueExpression>
+    </parameter>      <!-- Employee Demographics Fields (accessed through employee nested object) -->
     <field name="employee.id" class="java.lang.String"/>
     <field name="employee.firstName" class="java.lang.String"/>
     <field name="employee.lastName" class="java.lang.String"/>
@@ -34,458 +47,563 @@
     <field name="employee.department" class="java.lang.String"/>
     <field name="employee.position" class="java.lang.String"/>
     <field name="employee.hireDate" class="java.time.LocalDateTime"/>
+      <!-- Individual Certification Activity Fields -->
+    <field name="certificationId" class="java.lang.String"/>
+    <field name="certificationName" class="java.lang.String"/>
+    <field name="certificationCategory" class="java.lang.String"/>
+    <field name="certificationDescription" class="java.lang.String"/>
+    <field name="status" class="java.lang.String"/>
+    <field name="completionPercentage" class="java.lang.Double"/>
+    <field name="currentStageName" class="java.lang.String"/>
+    <field name="currentStageSequence" class="java.lang.Integer"/>
+    <field name="enrolledAt" class="java.time.LocalDateTime"/>
+    <field name="completedAt" class="java.time.LocalDateTime"/>
+    <field name="dueDate" class="java.time.LocalDateTime"/>
     
-    <!-- Certification and Activity Data Fields -->
-    <field name="certifications" class="java.util.List"/>
-      <!-- Variables for statistics -->
+    <!-- Employee-level certification count fields -->
+    <field name="completedCertificationsCount" class="java.lang.Long"/>
+    <field name="inProgressCertificationsCount" class="java.lang.Long"/>
+    <field name="failedCertificationsCount" class="java.lang.Long"/>
+    
+    <!-- Variables for statistics -->
     <variable name="DEPT_COUNT" class="java.lang.Integer" calculation="DistinctCount">
         <variableExpression><![CDATA[$F{employee.department}]]></variableExpression>
     </variable>
     <variable name="RECORD_COUNT" class="java.lang.Integer" calculation="Count">
         <variableExpression><![CDATA[1]]></variableExpression>
     </variable>
+    <variable name="EMPLOYEE_TOTAL_COMPLETED" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{completedCertificationsCount}]]></variableExpression>
+    </variable>
+    <variable name="EMPLOYEE_TOTAL_IN_PROGRESS" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{inProgressCertificationsCount}]]></variableExpression>
+    </variable>
+    <variable name="EMPLOYEE_TOTAL_FAILED" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{failedCertificationsCount}]]></variableExpression>
+    </variable>
+    
+    <!-- Employee Group Definition -->
+    <group name="EmployeeGroup" isStartNewPage="true" isReprintHeaderOnEachPage="false">
+        <groupExpression><![CDATA[$F{employee.id}]]></groupExpression>
+          <!-- Employee Group Header: Demographics + Certification Summary -->
+        <groupHeader>
+            <band height="280" splitType="Stretch">                <!-- Section 1: Employee Demographics -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="10" width="782" height="30" backcolor="#2B6CB0"/>
+                </rectangle>
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="10" width="782" height="3" backcolor="#1A365D"/>
+                </rectangle>
+                <staticText>
+                    <reportElement x="15" y="16" width="400" height="18" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Left" verticalAlignment="Middle">
+                        <font fontName="Arial" size="12" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Employee Demographics]]></text>
+                </staticText>
+                
+                <!-- Employee Information Grid -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="40" width="782" height="60" backcolor="#F8FAFC"/>
+                    <graphicElement>
+                        <pen lineWidth="1.0" lineColor="#E2E8F0"/>
+                    </graphicElement>
+                </rectangle>
+                  <!-- Employee Details -->
+                <staticText>
+                    <reportElement x="15" y="45" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Employee ID:]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="100" y="45" width="150" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.id}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="15" y="62" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Full Name:]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="100" y="62" width="150" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.firstName} + " " + $F{employee.lastName}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="15" y="79" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Email:]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="100" y="79" width="200" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.email}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="400" y="45" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Department:]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="485" y="45" width="150" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.department}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="400" y="62" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Position:]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="485" y="62" width="150" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.position}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="400" y="79" width="80" height="15" forecolor="#374151"/>
+                    <textElement><font fontName="Arial" size="10" isBold="true"/></textElement>
+                    <text><![CDATA[Hire Date:]]></text>
+                </staticText>
+                <textField pattern="MM/dd/yyyy">
+                    <reportElement x="485" y="79" width="100" height="15"/>
+                    <textElement><font fontName="Arial" size="10"/></textElement>
+                    <textFieldExpression><![CDATA[$F{employee.hireDate}]]></textFieldExpression>
+                </textField>
+                  <!-- Section 2: Certification Summary -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="110" width="782" height="30" backcolor="#2B6CB0"/>
+                </rectangle>
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="110" width="782" height="3" backcolor="#1A365D"/>
+                </rectangle>
+                <staticText>
+                    <reportElement x="15" y="116" width="400" height="18" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Left" verticalAlignment="Middle">
+                        <font fontName="Arial" size="12" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Certification Summary]]></text>
+                </staticText>
+                
+                <!-- Certification Summary Grid -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="140" width="782" height="60" backcolor="#F8FAFC"/>
+                    <graphicElement>
+                        <pen lineWidth="1.0" lineColor="#E2E8F0"/>
+                    </graphicElement>
+                </rectangle>
+                  <!-- Summary Statistics -->
+                <staticText>
+                    <reportElement x="50" y="150" width="150" height="15" forecolor="#10B981"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[✓ Completed]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="50" y="165" width="150" height="20" forecolor="#10B981"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="14" isBold="true"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$F{completedCertificationsCount}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="250" y="150" width="150" height="15" forecolor="#F59E0B"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[⏳ In Progress]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="250" y="165" width="150" height="20" forecolor="#F59E0B"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="14" isBold="true"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$F{inProgressCertificationsCount}]]></textFieldExpression>
+                </textField>
+                
+                <staticText>
+                    <reportElement x="450" y="150" width="150" height="15" forecolor="#EF4444"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[✗ Failed]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="450" y="165" width="150" height="20" forecolor="#EF4444"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="14" isBold="true"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$F{failedCertificationsCount}]]></textFieldExpression>
+                </textField>
+                  <!-- Section 3: Activities Header -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="210" width="782" height="30" backcolor="#2B6CB0"/>
+                </rectangle>
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="210" width="782" height="3" backcolor="#1A365D"/>
+                </rectangle>
+                <staticText>
+                    <reportElement x="15" y="216" width="400" height="18" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Left" verticalAlignment="Middle">
+                        <font fontName="Arial" size="12" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Certification Activities]]></text>
+                </staticText>
+                
+                <!-- Activities Table Header -->
+                <rectangle>
+                    <reportElement mode="Opaque" x="0" y="240" width="782" height="25" backcolor="#3B82F6"/>
+                </rectangle>
+                <staticText>
+                    <reportElement x="10" y="245" width="150" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Certification]]></text>
+                </staticText>
+                <staticText>
+                    <reportElement x="165" y="245" width="80" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Status]]></text>
+                </staticText>
+                <staticText>
+                    <reportElement x="250" y="245" width="100" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Progress]]></text>
+                </staticText>
+                <staticText>
+                    <reportElement x="355" y="245" width="120" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Current Stage]]></text>
+                </staticText>
+                <staticText>
+                    <reportElement x="480" y="245" width="100" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Due Date]]></text>
+                </staticText>
+                <staticText>
+                    <reportElement x="585" y="245" width="190" height="15" forecolor="#FFFFFF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="10" isBold="true"/>
+                    </textElement>
+                    <text><![CDATA[Notes]]></text>
+                </staticText></band>
+        </groupHeader>
+        
+        <!-- Employee Group Footer -->
+        <groupFooter>
+            <band height="30" splitType="Stretch">
+                <line>
+                    <reportElement x="0" y="10" width="782" height="1" forecolor="#CBD5E0"/>
+                </line>
+                <staticText>
+                    <reportElement x="0" y="15" width="782" height="10" forecolor="#9CA3AF"/>
+                    <textElement textAlignment="Center">
+                        <font fontName="Arial" size="8" isItalic="true"/>
+                    </textElement>
+                    <text><![CDATA[End of employee certification report]]></text>
+                </staticText>
+            </band>
+        </groupFooter>    </group>
     
     <!-- Title Section -->
     <title>
-        <band height="120" splitType="Stretch">
-            <!-- Professional Header Background -->
+        <band height="140" splitType="Stretch">
+            <!-- Professional Header Background with Gradient Effect -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="0" width="782" height="50" backcolor="#2E5C8A"/>
-            </rectangle>            <staticText>
-                <reportElement x="0" y="5" width="782" height="40" forecolor="#FFFFFF"/>
+                <reportElement mode="Opaque" x="0" y="0" width="782" height="60" backcolor="#1E3A5F"/>
+            </rectangle>
+            <rectangle>
+                <reportElement mode="Opaque" x="0" y="0" width="782" height="2" backcolor="#4A90C2"/>
+            </rectangle>
+            
+            <staticText>
+                <reportElement x="0" y="8" width="782" height="32" forecolor="#FFFFFF"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="24" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Certifications Report]]></text>
+                <text><![CDATA[Employee Certification Report]]></text>
             </staticText>
             
-            <!-- Company Name and Generation Date -->
+            <staticText>
+                <reportElement x="0" y="38" width="782" height="18" forecolor="#B8D4EA"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font fontName="Arial" size="12" isItalic="true"/>
+                </textElement>
+                <text><![CDATA[Comprehensive Certification Status and Activity Report]]></text>
+            </staticText>
+            
+            <!-- Company Information and Generation Date -->
             <textField>
-                <reportElement x="0" y="60" width="400" height="25" forecolor="#555555"/>
+                <reportElement x="20" y="70" width="400" height="25" forecolor="#2C5282"/>
                 <textElement textAlignment="Left" verticalAlignment="Middle">
                     <font fontName="Arial" size="16" isBold="true"/>
                 </textElement>
                 <textFieldExpression><![CDATA[$P{COMPANY_NAME}]]></textFieldExpression>
             </textField>
             <textField>
-                <reportElement x="400" y="60" width="382" height="25" forecolor="#555555"/>
+                <reportElement x="420" y="70" width="342" height="25" forecolor="#4A5568"/>
                 <textElement textAlignment="Right" verticalAlignment="Middle">
                     <font fontName="Arial" size="12"/>
                 </textElement>
-                <textFieldExpression><![CDATA["Generated: " + new java.text.SimpleDateFormat("MMMM dd, yyyy 'at' HH:mm").format(new java.util.Date())]]></textFieldExpression>
+                <textFieldExpression><![CDATA["Generated: " + new java.text.SimpleDateFormat("MMMM dd, yyyy 'at' HH:mm:ss").format(new java.util.Date())]]></textFieldExpression>
             </textField>
             
-            <!-- Summary Statistics -->
+            <!-- Enhanced Summary Statistics Dashboard -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="95" width="200" height="20" backcolor="#E8F4FD"/>
+                <reportElement mode="Opaque" x="0" y="105" width="782" height="30" backcolor="#F7FAFC"/>
                 <graphicElement>
-                    <pen lineWidth="1.0" lineColor="#4A90C2"/>
+                    <pen lineWidth="1.0" lineColor="#CBD5E0"/>
                 </graphicElement>
             </rectangle>
+            
+            <!-- Total Employees -->
+            <rectangle>
+                <reportElement mode="Opaque" x="10" y="110" width="120" height="20" backcolor="#4299E1"/>
+            </rectangle>
             <staticText>
-                <reportElement x="5" y="97" width="100" height="16" forecolor="#2E5C8A"/>
+                <reportElement x="15" y="112" width="80" height="16" forecolor="#FFFFFF"/>
                 <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
+                    <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
                 <text><![CDATA[Total Employees:]]></text>
             </staticText>
             <textField>
-                <reportElement x="105" y="97" width="90" height="16" forecolor="#2E5C8A"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
+                <reportElement x="95" y="112" width="30" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="10" isBold="true"/>
                 </textElement>
                 <textFieldExpression><![CDATA[$P{TOTAL_EMPLOYEES}]]></textFieldExpression>
             </textField>
-        </band>
-    </title>
-    
-    <!-- Section 1: Employee Demographics Header -->
-    <columnHeader>
-        <band height="70" splitType="Stretch">
-            <!-- Section Header -->
+            
+            <!-- Total Certifications -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="0" width="782" height="30" backcolor="#A23B72"/>
+                <reportElement mode="Opaque" x="140" y="110" width="140" height="20" backcolor="#805AD5"/>
             </rectangle>
             <staticText>
-                <reportElement x="10" y="5" width="400" height="20" forecolor="#FFFFFF"/>
+                <reportElement x="145" y="112" width="100" height="16" forecolor="#FFFFFF"/>
                 <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="14" isBold="true"/>
+                    <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Section 1: Employee Demographics]]></text>
+                <text><![CDATA[Total Certifications:]]></text>
             </staticText>
+            <textField>
+                <reportElement x="245" y="112" width="30" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font fontName="Arial" size="10" isBold="true"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{TOTAL_CERTIFICATIONS}]]></textFieldExpression>
+            </textField>
             
-            <!-- Column Headers -->
+            <!-- Completed -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="40" width="782" height="30" backcolor="#4A90C2"/>
+                <reportElement mode="Opaque" x="290" y="110" width="120" height="20" backcolor="#38A169"/>
             </rectangle>
+            <staticText>
+                <reportElement x="295" y="112" width="70" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Left" verticalAlignment="Middle">
+                    <font fontName="Arial" size="9" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Completed:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="365" y="112" width="40" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font fontName="Arial" size="10" isBold="true"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{COMPLETED_CERTIFICATIONS}]]></textFieldExpression>
+            </textField>
             
+            <!-- In Progress -->
+            <rectangle>
+                <reportElement mode="Opaque" x="420" y="110" width="120" height="20" backcolor="#ED8936"/>
+            </rectangle>
             <staticText>
-                <reportElement x="5" y="45" width="80" height="20" forecolor="#FFFFFF"/>
+                <reportElement x="425" y="112" width="70" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Left" verticalAlignment="Middle">
+                    <font fontName="Arial" size="9" isBold="true"/>
+                </textElement>
+                <text><![CDATA[In Progress:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="495" y="112" width="40" height="16" forecolor="#FFFFFF"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="10" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Employee ID]]></text>
-            </staticText>
+                <textFieldExpression><![CDATA[$P{IN_PROGRESS_CERTIFICATIONS}]]></textFieldExpression>
+            </textField>
+            
+            <!-- Failed -->
+            <rectangle>
+                <reportElement mode="Opaque" x="550" y="110" width="100" height="20" backcolor="#E53E3E"/>
+            </rectangle>
             <staticText>
-                <reportElement x="90" y="45" width="120" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
+                <reportElement x="555" y="112" width="50" height="16" forecolor="#FFFFFF"/>
+                <textElement textAlignment="Left" verticalAlignment="Middle">
+                    <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Full Name]]></text>
+                <text><![CDATA[Failed:]]></text>
             </staticText>
-            <staticText>
-                <reportElement x="215" y="45" width="150" height="20" forecolor="#FFFFFF"/>
+            <textField>
+                <reportElement x="605" y="112" width="40" height="16" forecolor="#FFFFFF"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="10" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Email Address]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="370" y="45" width="100" height="20" forecolor="#FFFFFF"/>
+                <textFieldExpression><![CDATA[$P{FAILED_CERTIFICATIONS}]]></textFieldExpression>
+            </textField>
+            
+            <!-- Success Rate -->
+            <textField>
+                <reportElement x="660" y="110" width="115" height="20" forecolor="#2D3748"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
+                    <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Department]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="475" y="45" width="110" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Position]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="590" y="45" width="80" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Hire Date]]></text>
-            </staticText>            <staticText>
-                <reportElement x="675" y="45" width="100" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Status]]></text>
-            </staticText>
-        </band>
-    </columnHeader>
-    
-    <!-- Detail Rows for Employee Data -->
+                <textFieldExpression><![CDATA["Success Rate: " + 
+                    ($P{TOTAL_CERTIFICATIONS} > 0 ? 
+                    String.format("%.1f%%", ($P{COMPLETED_CERTIFICATIONS}.doubleValue() / $P{TOTAL_CERTIFICATIONS}.doubleValue()) * 100) : 
+                    "N/A")]]></textFieldExpression>
+            </textField>
+        </band>    </title>    <!-- Detail section - Individual Certification Activities -->
     <detail>
-        <band height="30" splitType="Stretch">
-            <!-- Alternating Row Colors -->
+        <band height="25" splitType="Stretch">
+            <!-- Alternating row background -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="0" width="782" height="30" backcolor="#FFFFFF">
-                    <printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 1]]></printWhenExpression>
-                </reportElement>
-            </rectangle>
-            <rectangle>
-                <reportElement mode="Opaque" x="0" y="0" width="782" height="30" backcolor="#F8F9FA">
+                <reportElement mode="Opaque" x="0" y="0" width="782" height="25" backcolor="#FFFFFF">
                     <printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 0]]></printWhenExpression>
                 </reportElement>
+                <graphicElement>
+                    <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+                </graphicElement>
             </rectangle>
-              <!-- Data Fields -->
-            <textField>
-                <reportElement x="5" y="5" width="80" height="20" forecolor="#333333"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
+            <rectangle>
+                <reportElement mode="Opaque" x="0" y="0" width="782" height="25" backcolor="#F8FAFC">
+                    <printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 != 0]]></printWhenExpression>
+                </reportElement>
+                <graphicElement>
+                    <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+                </graphicElement>
+            </rectangle>
+            
+            <!-- Certification Name -->
+            <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+                <reportElement x="10" y="5" width="150" height="15" isPrintWhenDetailOverflows="true"/>
+                <textElement verticalAlignment="Middle">
                     <font fontName="Arial" size="9"/>
                 </textElement>
-                <textFieldExpression><![CDATA[$F{employee.id}.length() > 8 ? $F{employee.id}.substring(0, 8) + "..." : $F{employee.id}]]></textFieldExpression>
+                <textFieldExpression><![CDATA[$F{certificationName} != null ? $F{certificationName} : "No certifications"]]></textFieldExpression>
             </textField>
-            
-            <textField>
-                <reportElement x="90" y="5" width="120" height="20" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
+              <!-- Status with conditional formatting -->
+            <textField isBlankWhenNull="true">
+                <reportElement x="165" y="5" width="80" height="15"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
-                <textFieldExpression><![CDATA[$F{employee.firstName} + " " + $F{employee.lastName}]]></textFieldExpression>
+                <textFieldExpression><![CDATA[$F{status} != null ? $F{status} : "N/A"]]></textFieldExpression>
             </textField>
             
-            <textField>
-                <reportElement x="215" y="5" width="150" height="20" forecolor="#555555"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="8"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{employee.email}]]></textFieldExpression>
-            </textField>
-            
-            <textField>
-                <reportElement x="370" y="5" width="100" height="20" forecolor="#333333"/>
+            <!-- Progress Percentage -->
+            <textField pattern="#0.0%" isBlankWhenNull="true">
+                <reportElement x="250" y="5" width="100" height="15"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="9"/>
                 </textElement>
-                <textFieldExpression><![CDATA[$F{employee.department}]]></textFieldExpression>
+                <textFieldExpression><![CDATA[$F{completionPercentage} != null ? $F{completionPercentage} / 100.0 : 0.0]]></textFieldExpression>
             </textField>
             
-            <textField>
-                <reportElement x="475" y="5" width="110" height="20" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
+            <!-- Current Stage -->
+            <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+                <reportElement x="355" y="5" width="120" height="15" isPrintWhenDetailOverflows="true"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
                     <font fontName="Arial" size="9"/>
                 </textElement>
-                <textFieldExpression><![CDATA[$F{employee.position}]]></textFieldExpression>
+                <textFieldExpression><![CDATA[$F{currentStageName} != null ? $F{currentStageName} : "Not Started"]]></textFieldExpression>
             </textField>
             
-            <textField>
-                <reportElement x="590" y="5" width="80" height="20" forecolor="#666666"/>
+            <!-- Due Date -->
+            <textField pattern="MM/dd/yyyy" isBlankWhenNull="true">
+                <reportElement x="480" y="5" width="100" height="15"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font fontName="Arial" size="9"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{dueDate}]]></textFieldExpression>
+            </textField>
+              <!-- Notes/Enrollment Info -->
+            <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+                <reportElement x="585" y="5" width="190" height="15" isPrintWhenDetailOverflows="true"/>
+                <textElement verticalAlignment="Middle">
                     <font fontName="Arial" size="8"/>
                 </textElement>
-                <textFieldExpression><![CDATA[new java.text.SimpleDateFormat("MMM dd, yyyy").format(java.sql.Timestamp.valueOf($F{employee.hireDate}))]]></textFieldExpression>
+                <textFieldExpression><![CDATA[$F{enrolledAt} != null ? 
+                    ("Enrolled: " + $F{enrolledAt}.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"))) : 
+                    "Not enrolled"]]></textFieldExpression>
             </textField>
-            
-            <textField>
-                <reportElement x="675" y="5" width="100" height="20" forecolor="#666666"/>
-                <textElement textAlignment="Right" verticalAlignment="Middle">
-                    <font fontName="Arial" size="8"/>
-                </textElement>
-                <textFieldExpression><![CDATA["N/A"]]></textFieldExpression>
-            </textField>
-            
-            <!-- Bottom Border -->
-            <line>
-                <reportElement x="0" y="29" width="782" height="1" forecolor="#E0E0E0"/>
-            </line>        </band>
+        </band>
     </detail>
-    
-    <!-- Professional Page Footer -->
+      
+    <!-- Enhanced Professional Page Footer -->
     <pageFooter>
-        <band height="40" splitType="Stretch">
-            <!-- Footer Background -->
+        <band height="45" splitType="Stretch">
+            <!-- Footer Background with gradient effect -->
             <rectangle>
-                <reportElement mode="Opaque" x="0" y="10" width="782" height="25" backcolor="#F0F0F0"/>
+                <reportElement mode="Opaque" x="0" y="8" width="782" height="32" backcolor="#F7FAFC"/>
                 <graphicElement>
-                    <pen lineWidth="1.0" lineColor="#CCCCCC"/>
+                    <pen lineWidth="1.0" lineColor="#CBD5E0"/>
                 </graphicElement>
             </rectangle>
+            <rectangle>
+                <reportElement mode="Opaque" x="0" y="8" width="782" height="2" backcolor="#4A90C2"/>
+            </rectangle>
             
-            <!-- Confidentiality Notice -->
+            <!-- Confidentiality Notice with icon -->
             <staticText>
-                <reportElement x="10" y="15" width="300" height="15" forecolor="#666666"/>
+                <reportElement x="15" y="15" width="350" height="18" forecolor="#4A5568"/>
                 <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="8" isItalic="true"/>
+                    <font fontName="Arial" size="9" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Confidential - For Internal Use Only]]></text>
+                <text><![CDATA[🔒 CONFIDENTIAL - For Internal Use Only]]></text>
             </staticText>
             
-            <!-- Page Information -->
+            <!-- Page Information with enhanced styling -->
             <textField>
-                <reportElement x="590" y="15" width="180" height="15" forecolor="#666666"/>
+                <reportElement x="620" y="15" width="150" height="18" forecolor="#2D3748"/>
                 <textElement textAlignment="Right" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9"/>
-                </textElement>
-                <textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER}]]></textFieldExpression>
-            </textField>
-            
-            <!-- Report Generation Info -->
-            <textField>
-                <reportElement x="320" y="15" width="260" height="15" forecolor="#666666"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="8"/>
-                </textElement>
-                <textFieldExpression><![CDATA["Certifications Report - Generated " + new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date())]]></textFieldExpression>
-            </textField>
-        </band>
-    </pageFooter>
-      <!-- Summary Band for Additional Sections -->
-    <summary>
-        <band height="400" splitType="Stretch">
-            <!-- Section 2: Certification Summary Header -->
-            <rectangle>
-                <reportElement mode="Opaque" x="0" y="20" width="782" height="30" backcolor="#F18F01"/>
-            </rectangle>
-            <staticText>
-                <reportElement x="10" y="25" width="400" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="14" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Section 2: Certification Summary]]></text>
-            </staticText>
-            
-            <!-- Certification Summary Statistics -->
-            <staticText>
-                <reportElement x="10" y="60" width="150" height="15" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
                     <font fontName="Arial" size="10" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Completed Certifications:]]></text>
-            </staticText>
-            <textField>
-                <reportElement x="170" y="60" width="50" height="15" forecolor="#008000"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{certifications} != null ? ((java.util.List)$F{certifications}).stream().filter(cert -> "COMPLETED".equals(((com.certreport.dto.CertificationDto)cert).getStatus().toString())).count() : 0]]></textFieldExpression>
+                <textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER} + " of " + $V{PAGE_COUNT}]]></textFieldExpression>
             </textField>
             
-            <staticText>
-                <reportElement x="250" y="60" width="150" height="15" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <text><![CDATA[In-Progress Certifications:]]></text>
-            </staticText>
+            <!-- Report Type and Generation Info -->
             <textField>
-                <reportElement x="410" y="60" width="50" height="15" forecolor="#FF8C00"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{certifications} != null ? ((java.util.List)$F{certifications}).stream().filter(cert -> "IN_PROGRESS".equals(((com.certreport.dto.CertificationDto)cert).getStatus().toString())).count() : 0]]></textFieldExpression>
-            </textField>
-            
-            <staticText>
-                <reportElement x="490" y="60" width="150" height="15" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Failed Certifications:]]></text>
-            </staticText>
-            <textField>
-                <reportElement x="650" y="60" width="50" height="15" forecolor="#DC143C"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="10" isBold="true"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{certifications} != null ? ((java.util.List)$F{certifications}).stream().filter(cert -> "FAILED".equals(((com.certreport.dto.CertificationDto)cert).getStatus().toString())).count() : 0]]></textFieldExpression>
-            </textField>
-            
-            <!-- Certification Details Table Header -->
-            <rectangle>
-                <reportElement mode="Opaque" x="0" y="85" width="782" height="20" backcolor="#E0E0E0"/>
-                <graphicElement>
-                    <pen lineWidth="1.0" lineColor="#CCCCCC"/>
-                </graphicElement>
-            </rectangle>
-            <staticText>
-                <reportElement x="10" y="87" width="200" height="16" forecolor="#333333"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Certification Name]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="220" y="87" width="100" height="16" forecolor="#333333"/>
+                <reportElement x="370" y="15" width="240" height="18" forecolor="#718096"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Status]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="330" y="87" width="100" height="16" forecolor="#333333"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Progress]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="440" y="87" width="120" height="16" forecolor="#333333"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Current Stage]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="570" y="87" width="100" height="16" forecolor="#333333"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Enrolled Date]]></text>
-            </staticText>
-            <staticText>
-                <reportElement x="680" y="87" width="90" height="16" forecolor="#333333"/>
-                <textElement textAlignment="Center" verticalAlignment="Middle">
-                    <font fontName="Arial" size="9" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Due Date]]></text>
-            </staticText>
-            
-            <!-- Certification List Display -->
-            <textField>
-                <reportElement x="10" y="110" width="760" height="60" forecolor="#555555"/>
-                <textElement textAlignment="Left" verticalAlignment="Top">
-                    <font fontName="Arial" size="9"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{certifications} != null && !((java.util.List)$F{certifications}).isEmpty() ? 
-                    ((java.util.List)$F{certifications}).stream()
-                        .map(cert -> {
-                            com.certreport.dto.CertificationDto certification = (com.certreport.dto.CertificationDto)cert;
-                            String name = certification.getCertificationDefinition() != null ? 
-                                certification.getCertificationDefinition().getName() : "Unknown Certification";
-                            String status = certification.getStatus() != null ? certification.getStatus().toString() : "UNKNOWN";
-                            String progress = certification.getCompletionPercentage() != null ? 
-                                String.format("%.1f%%", certification.getCompletionPercentage()) : "0%";
-                            String currentStage = certification.getCurrentStageName() != null ? 
-                                certification.getCurrentStageName() : "N/A";
-                            String enrolledDate = certification.getEnrolledAt() != null ? 
-                                certification.getEnrolledAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")) : "N/A";
-                            String dueDate = certification.getDueDate() != null ? 
-                                certification.getDueDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")) : "N/A";
-                            return String.format("• %s | %s | %s | %s | %s | %s", 
-                                name, status, progress, currentStage, enrolledDate, dueDate);
-                        })
-                        .collect(java.util.stream.Collectors.joining("\n"))
-                    : "No certifications found for this employee during the selected period."]]></textFieldExpression>
-            </textField>
-            
-            <!-- Section 3: Activity Details Header -->
-            <rectangle>
-                <reportElement mode="Opaque" x="0" y="190" width="782" height="30" backcolor="#C73E1D"/>
-            </rectangle>
-            <staticText>
-                <reportElement x="10" y="195" width="400" height="20" forecolor="#FFFFFF"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
-                    <font fontName="Arial" size="14" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Section 3: Activity Details]]></text>
-            </staticText>
-            
-            <!-- Activity Details Content -->
-            <textField>
-                <reportElement x="10" y="230" width="760" height="120" forecolor="#555555"/>
-                <textElement textAlignment="Left" verticalAlignment="Top">
-                    <font fontName="Arial" size="9"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$F{certifications} != null && !((java.util.List)$F{certifications}).isEmpty() ? 
-                    ((java.util.List)$F{certifications}).stream()
-                        .map(cert -> {
-                            com.certreport.dto.CertificationDto certification = (com.certreport.dto.CertificationDto)cert;
-                            String certName = certification.getCertificationDefinition() != null ? 
-                                certification.getCertificationDefinition().getName() : "Unknown Certification";
-                            
-                            StringBuilder activities = new StringBuilder();
-                            activities.append("CERTIFICATION: ").append(certName).append("\n");
-                            
-                            if (certification.getStageProgress() != null && !certification.getStageProgress().isEmpty()) {
-                                certification.getStageProgress().forEach(stage -> {
-                                    activities.append("  STAGE: ").append(stage.getName() != null ? stage.getName() : "Unknown Stage")
-                                             .append(" - Status: ").append(stage.getStatus() != null ? stage.getStatus().toString() : "UNKNOWN")
-                                             .append(" - Progress: ").append(stage.getCompletionPercentage() != null ? 
-                                                 String.format("%.1f%%", stage.getCompletionPercentage()) : "0%");
-                                    if (stage.getStartedAt() != null) {
-                                        activities.append(" - Started: ").append(stage.getStartedAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                                    }
-                                    if (stage.getCompletedAt() != null) {
-                                        activities.append(" - Completed: ").append(stage.getCompletedAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                                    }
-                                    activities.append("\n");
-                                });
-                            } else {
-                                activities.append("  No stage information available\n");
-                            }
-                            
-                            return activities.toString();
-                        })
-                        .collect(java.util.stream.Collectors.joining("\n"))
-                    : "No certification activities found for this employee during the selected period."]]></textFieldExpression>
-            </textField>
-            
-            <!-- Report Generation Info -->
-            <staticText>
-                <reportElement x="10" y="360" width="750" height="15" forecolor="#666666"/>
-                <textElement textAlignment="Left" verticalAlignment="Middle">
                     <font fontName="Arial" size="8" isItalic="true"/>
                 </textElement>
-                <text><![CDATA[Report includes comprehensive certification data with status indicators and activity tracking for audit compliance.]]></text>
+                <textFieldExpression><![CDATA["Certification Audit Report • " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(new java.util.Date())]]></textFieldExpression>
+            </textField>
+            
+            <!-- Compliance footer note -->
+            <staticText>
+                <reportElement x="15" y="25" width="750" height="12" forecolor="#9CA3AF"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font fontName="Arial" size="7" isItalic="true"/>
+                </textElement>
+                <text><![CDATA[This report contains comprehensive certification data with status indicators for audit compliance and performance tracking.]]></text>
             </staticText>
-        </band>
-    </summary>
+        </band>    </pageFooter>
     
 </jasperReport>
