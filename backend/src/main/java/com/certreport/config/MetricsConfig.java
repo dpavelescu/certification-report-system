@@ -7,17 +7,11 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
- * Configuration class for application metrics and monitoring
+ * Simple metrics configuration - let Micrometer handle complexity
  */
 @Configuration
 public class MetricsConfig {
-
-    private final AtomicInteger activeReportGenerations = new AtomicInteger(0);
-    private final AtomicInteger totalReportsGenerated = new AtomicInteger(0);
-    private final AtomicInteger failedReportsCount = new AtomicInteger(0);
 
     @Bean
     public Counter reportGenerationCounter(MeterRegistry meterRegistry) {
@@ -39,48 +33,13 @@ public class MetricsConfig {
                 .description("Time taken to generate reports")
                 .register(meterRegistry);
     }    @Bean
-    public Gauge activeReportGenerationsGauge(MeterRegistry meterRegistry) {
-        return Gauge.builder("reports.active.count", this, MetricsConfig::getActiveReportGenerations)
-                .description("Number of currently active report generations")
-                .register(meterRegistry);
-    }
-
-    @Bean
     public Gauge memoryUsageGauge(MeterRegistry meterRegistry) {
-        return Gauge.builder("jvm.memory.used.bytes", this, config -> {
+        // Register gauge using the correct builder pattern
+        return Gauge.builder("jvm.memory.used.bytes", () -> {
                     Runtime runtime = Runtime.getRuntime();
                     return (double) (runtime.totalMemory() - runtime.freeMemory());
                 })
                 .description("JVM memory usage during report generation")
                 .register(meterRegistry);
-    }
-
-    // Utility methods for metric tracking
-    public void incrementActiveReportGenerations() {
-        activeReportGenerations.incrementAndGet();
-    }
-
-    public void decrementActiveReportGenerations() {
-        activeReportGenerations.decrementAndGet();
-    }
-
-    public int getActiveReportGenerations() {
-        return activeReportGenerations.get();
-    }
-
-    public void incrementTotalReportsGenerated() {
-        totalReportsGenerated.incrementAndGet();
-    }
-
-    public void incrementFailedReportsCount() {
-        failedReportsCount.incrementAndGet();
-    }
-
-    public int getTotalReportsGenerated() {
-        return totalReportsGenerated.get();
-    }
-
-    public int getFailedReportsCount() {
-        return failedReportsCount.get();
     }
 }

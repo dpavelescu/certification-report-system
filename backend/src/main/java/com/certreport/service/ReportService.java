@@ -2,6 +2,8 @@ package com.certreport.service;
 
 import com.certreport.dto.EmployeeDto;
 import com.certreport.dto.ReportRequestDto;
+import com.certreport.dto.CompleteReportDataDto;
+import com.certreport.dto.CertificationDto;
 import com.certreport.model.Report;
 import com.certreport.repository.ReportRepository;
 import io.micrometer.core.instrument.Timer;
@@ -21,18 +23,20 @@ import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ReportService {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
+      private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
     private final ReportRepository reportRepository;
     private final EmployeeService employeeService;
+    private final CertificationService certificationService;
     private final PerformanceMonitoringService performanceMonitoringService;
       public ReportService(ReportRepository reportRepository, 
                         EmployeeService employeeService,
+                        CertificationService certificationService,
                         PerformanceMonitoringService performanceMonitoringService) {
         this.reportRepository = reportRepository;
         this.employeeService = employeeService;
+        this.certificationService = certificationService;
         this.performanceMonitoringService = performanceMonitoringService;
-    }    @Async("reportTaskExecutor")
+    }@Async("reportTaskExecutor")
     public CompletableFuture<Report> generateReportAsync(Report report) {
         Timer.Sample sample = performanceMonitoringService.startReportGeneration(report.getId());
         
@@ -45,16 +49,20 @@ public class ReportService {
             String parameters = report.getParameters();
             // Extract employee IDs from parameters string like "ReportRequestDto{reportType='employee_demographics', employeeIds=[2, 5]}"
             List<String> employeeIds = parseEmployeeIdsFromParameters(parameters);
-            
-            // Get employee data
+              // Get employee data
             List<EmployeeDto> employees = employeeService.getEmployeesByIds(employeeIds);
             
-            // Generate PDF report
-            String filePath = generatePdfReport(employees, report.getId());
-            
-            // Update report with results
+            // Get complete report data including certifications
+            List<CompleteReportDataDto> completeReportData = new ArrayList<>();
+            for (EmployeeDto employee : employees) {
+                List<CertificationDto> certifications = certificationService.getCertificationsByEmployeeId(employee.getId());
+                completeReportData.add(new CompleteReportDataDto(employee, certifications));
+            }
+              // Generate PDF report with complete data
+            String filePath = generateCertificationsPdfReport(completeReportData, report.getId());
+              // Update report with results
             report.setFilePath(filePath);
-            report.setPageCount(calculatePageCount(employees.size()));
+            report.setPageCount(calculatePageCount(completeReportData.size()));
             report.setStatus(Report.ReportStatus.COMPLETED);
             report.setCompletedAt(LocalDateTime.now());
             
@@ -89,27 +97,43 @@ public class ReportService {
         
         // Start async processing
         generateReportAsync(report);
-        
-        return report;    }
-
-    private String generatePdfReport(List<EmployeeDto> employees, String reportId) throws JRException {
-        // Load report template
-        InputStream reportTemplate = getClass().getResourceAsStream("/reports/employee_demographics.jrxml");
+          return report;    }    private String generateCertificationsPdfReport(List<CompleteReportDataDto> reportData, String reportId) throws JRException {        // Load the certifications report template
+        InputStream reportTemplate = getClass().getResourceAsStream("/reports/certifications_report.jrxml");
         if (reportTemplate == null) {
-            throw new RuntimeException("Report template not found");
+            throw new RuntimeException("Certifications report template not found at /reports/certifications_report.jrxml");
         }
         
         // Compile report
         JasperReport jasperReport = JasperCompileManager.compileReport(reportTemplate);
         
-        // Prepare data source
-        JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(employees);
+        // Prepare data source with complete report data
+        JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(reportData);
         
         // Report parameters
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put("REPORT_TITLE", "Employee Demographics Report");
+        parameters.put("REPORT_TITLE", "Employee Certification Report");
         parameters.put("GENERATION_DATE", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        parameters.put("TOTAL_EMPLOYEES", employees.size());
+        parameters.put("TOTAL_EMPLOYEES", reportData.size());
+        parameters.put("COMPANY_NAME", "CertReport Systems");
+        
+        // Calculate certification statistics
+        long totalCertifications = reportData.stream()
+                .mapToLong(data -> data.getCertifications() != null ? data.getCertifications().size() : 0)
+                .sum();
+        long completedCertifications = reportData.stream()
+                .mapToLong(CompleteReportDataDto::getCompletedCertificationsCount)
+                .sum();
+        long inProgressCertifications = reportData.stream()
+                .mapToLong(CompleteReportDataDto::getInProgressCertificationsCount)
+                .sum();
+        long failedCertifications = reportData.stream()
+                .mapToLong(CompleteReportDataDto::getFailedCertificationsCount)
+                .sum();
+        
+        parameters.put("TOTAL_CERTIFICATIONS", totalCertifications);
+        parameters.put("COMPLETED_CERTIFICATIONS", completedCertifications);
+        parameters.put("IN_PROGRESS_CERTIFICATIONS", inProgressCertifications);
+        parameters.put("FAILED_CERTIFICATIONS", failedCertifications);
         
         // Fill report
         JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
@@ -117,10 +141,12 @@ public class ReportService {
         // Export to PDF
         String fileName = String.format("CertificationReport_%s_%s.pdf", 
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")),
-                reportId.toString().substring(0, 8));
+                reportId.substring(0, 8));
         String filePath = System.getProperty("java.io.tmpdir") + File.separator + fileName;
         
         JasperExportManager.exportReportToPdfFile(jasperPrint, filePath);
+          logger.info("Generated certifications report with {} employees and {} total certifications", 
+                   reportData.size(), totalCertifications);
         
         return filePath;
     }
@@ -134,9 +160,8 @@ public class ReportService {
         return reportRepository.findById(reportId)
                 .orElseThrow(() -> new RuntimeException("Report not found: " + reportId));
     }
-    
-    public List<Report> getAllReports() {
-        return reportRepository.findAll();
+      public List<Report> getAllReports() {
+        return reportRepository.findAllByOrderByCreatedAtDesc();
     }
       public File getReportFile(String reportId) {
         Report report = getReportStatus(reportId);
@@ -162,9 +187,13 @@ public class ReportService {
         return String.format("%s_report_%d_employees_%s.pdf", 
             type.replace(" ", "_"), employeeCount, timestamp);
     }
-    
-    private List<String> parseEmployeeIdsFromParameters(String parameters) {
+      private List<String> parseEmployeeIdsFromParameters(String parameters) {
         // Parse employee IDs from parameters string like "ReportRequestDto{reportType='employee_demographics', employeeIds=[2, 5]}"
+        if (parameters == null || parameters.trim().isEmpty()) {
+            logger.warn("Parameters is null or empty, returning empty employee ID list");
+            return new ArrayList<>();
+        }
+        
         try {
             String pattern = "employeeIds=\\[([^\\]]+)\\]";
             java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);

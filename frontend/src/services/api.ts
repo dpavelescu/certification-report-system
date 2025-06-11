@@ -1,6 +1,6 @@
 // API Client using native fetch - no Axios as per specifications
 
-import type { Employee, Report, ReportRequest } from '../types';
+import type { Employee, Report, ReportRequest, CertificationDefinition, CertificationFilter, CertificationFilterResponse } from '../types';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -26,14 +26,9 @@ class ApiClient {
       throw error;
     }
   }
-
   // Employee endpoints
   async getEmployees(): Promise<Employee[]> {
     return this.fetchWithErrorHandling<Employee[]>('/employees');
-  }
-
-  async getEmployee(id: number): Promise<Employee> {
-    return this.fetchWithErrorHandling<Employee>(`/employees/${id}`);
   }
 
   // Report endpoints
@@ -83,6 +78,35 @@ class ApiClient {
 
   async getHealthStatus(): Promise<Record<string, unknown>> {
     return this.fetchWithErrorHandling<Record<string, unknown>>('/metrics/health');
+  }
+
+  // Certification endpoints
+  async getCertificationDefinitions(): Promise<CertificationDefinition[]> {
+    return this.fetchWithErrorHandling<CertificationDefinition[]>('/certifications/definitions');
+  }
+
+  async filterCertifications(filter: CertificationFilter): Promise<CertificationFilterResponse> {
+    return this.fetchWithErrorHandling<CertificationFilterResponse>('/certifications/filter', {
+      method: 'POST',
+      body: JSON.stringify(filter),
+    });
+  }
+
+  async getAvailableCertificationsForEmployees(employeeIds: string[]): Promise<CertificationDefinition[]> {
+    const queryParams = employeeIds.map(id => `employeeIds=${id}`).join('&');
+    return this.fetchWithErrorHandling<CertificationDefinition[]>(`/certifications/available?${queryParams}`);
+  }
+
+  async getEmployeesByDepartment(department: string): Promise<Employee[]> {
+    return this.fetchWithErrorHandling<Employee[]>(`/employees/department/${encodeURIComponent(department)}`);
+  }
+
+  async searchEmployees(searchTerm: string): Promise<Employee[]> {
+    return this.fetchWithErrorHandling<Employee[]>(`/employees/search?q=${encodeURIComponent(searchTerm)}`);
+  }
+
+  async getDepartments(): Promise<string[]> {
+    return this.fetchWithErrorHandling<string[]>('/employees/departments');
   }
 }
 

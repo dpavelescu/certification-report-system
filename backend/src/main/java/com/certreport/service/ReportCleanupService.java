@@ -216,35 +216,15 @@ public class ReportCleanupService {
         
         return new CleanupStats(totalReports, queuedReports, inProgressReports, 
                                completedReports, failedReports, stuckReports);
-    }
-
-    /**
-     * Data class for cleanup statistics
+    }    /**
+     * Simple data holder for cleanup statistics
      */
-    public static class CleanupStats {
-        private final long totalReports;
-        private final long queuedReports;
-        private final long inProgressReports;
-        private final long completedReports;
-        private final long failedReports;
-        private final long stuckReports;
-
-        public CleanupStats(long totalReports, long queuedReports, long inProgressReports,
-                           long completedReports, long failedReports, long stuckReports) {
-            this.totalReports = totalReports;
-            this.queuedReports = queuedReports;
-            this.inProgressReports = inProgressReports;
-            this.completedReports = completedReports;
-            this.failedReports = failedReports;
-            this.stuckReports = stuckReports;
-        }
-
-        // Getters
-        public long getTotalReports() { return totalReports; }
-        public long getQueuedReports() { return queuedReports; }
-        public long getInProgressReports() { return inProgressReports; }
-        public long getCompletedReports() { return completedReports; }
-        public long getFailedReports() { return failedReports; }
-        public long getStuckReports() { return stuckReports; }
-    }
+    public record CleanupStats(
+        long totalReports,
+        long queuedReports,
+        long inProgressReports,
+        long completedReports,
+        long failedReports,
+        long stuckReports
+    ) {}
 }

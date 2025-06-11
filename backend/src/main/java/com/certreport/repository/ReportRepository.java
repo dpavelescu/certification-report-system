@@ -14,6 +14,8 @@ public interface ReportRepository extends JpaRepository<Report, String> {
     
     List<Report> findByStatusOrderByCreatedAtDesc(Report.ReportStatus status);
     
+    List<Report> findAllByOrderByCreatedAtDesc();
+    
     @Query("SELECT r FROM Report r WHERE r.createdAt >= :since ORDER BY r.createdAt DESC")
     List<Report> findRecentReports(LocalDateTime since);
     

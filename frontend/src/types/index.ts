@@ -10,9 +10,75 @@ export interface Employee {
   hireDate: string;
 }
 
+// Certification-related types
+export interface CertificationDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  totalDurationHours: number;
+  validityPeriodMonths: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Certification {
+  id: string;
+  employee: Employee;
+  certificationDefinition: CertificationDefinition;
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'OVERDUE' | 'SUSPENDED' | 'EXPIRED';
+  completionPercentage: number;
+  currentStageId?: string;
+  currentStageName?: string;
+  currentStageSequence?: number;
+  enrolledAt: string;
+  completedAt?: string;
+  dueDate: string;
+  stageProgress?: StageProgress[];
+}
+
+export interface StageProgress {
+  id: string;
+  stageDefinitionId: string;
+  name: string;
+  description: string;
+  sequenceOrder: number;
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'OVERDUE' | 'SUSPENDED';
+  completionPercentage: number;
+  estimatedDurationHours: number;
+  isMandatory: boolean;
+  startedAt?: string;
+  completedAt?: string;
+  dueDate: string;
+}
+
+export interface CertificationFilter {
+  employeeIds?: string[];
+  certificationDefinitionIds?: string[];
+  statuses?: ('NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'OVERDUE' | 'SUSPENDED' | 'EXPIRED')[];
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  size?: number;
+  sortBy?: string;
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface CertificationFilterResponse {
+  certifications: Certification[];
+  totalElements: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export interface ReportRequest {
   employeeIds: string[]; // UUIDs as strings
   reportType: string;
+  certificationIds?: string[];
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface Report {

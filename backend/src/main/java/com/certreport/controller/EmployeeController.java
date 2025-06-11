@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/employees")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class EmployeeController {
       private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
     private final EmployeeService employeeService;
@@ -49,5 +48,20 @@ public class EmployeeController {
     @GetMapping("/departments")
     public ResponseEntity<List<String>> getAllDepartments() {
         return ResponseEntity.ok(employeeService.getAllDepartments());
+    }
+    
+    // Additional endpoints for frontend compatibility
+    @GetMapping("/search")
+    public ResponseEntity<List<EmployeeDto>> searchEmployees(@RequestParam("q") String searchTerm) {
+        logger.info("Searching employees with term: {}", searchTerm);
+        List<EmployeeDto> employees = employeeService.searchEmployees(searchTerm);
+        return ResponseEntity.ok(employees);
+    }
+    
+    @GetMapping("/department/{department}")
+    public ResponseEntity<List<EmployeeDto>> getEmployeesByDepartmentPath(@PathVariable String department) {
+        logger.info("Fetching employees for department: {}", department);
+        List<EmployeeDto> employees = employeeService.getEmployeesByDepartment(department);
+        return ResponseEntity.ok(employees);
     }
 }

@@ -1,4 +1,4 @@
-import Dashboard from './components/Dashboard'
+import EnhancedDashboard from './components/EnhancedDashboard'
 import { ReportProvider } from './context/ReportContext'
 
 function App() {
@@ -12,14 +12,14 @@ function App() {
                 Certification Report System
               </h1>
               <div className="text-sm text-gray-500">
-                Iteration 1 - MVP
+                Simplified Filtering Interface
               </div>
             </div>
           </div>
         </header>
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Dashboard />
+          <EnhancedDashboard />
         </main>
       </div>
     </ReportProvider>

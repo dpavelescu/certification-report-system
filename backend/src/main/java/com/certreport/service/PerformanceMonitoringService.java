@@ -1,6 +1,5 @@
 package com.certreport.service;
 
-import com.certreport.config.MetricsConfig;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -9,17 +8,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Service for monitoring and tracking performance metrics during report generation
  */
 @Service
-public class PerformanceMonitoringService {
-
-    private static final Logger logger = LoggerFactory.getLogger(PerformanceMonitoringService.class);
-
-    @Autowired
-    private MetricsConfig metricsConfig;
+public class PerformanceMonitoringService {    private static final Logger logger = LoggerFactory.getLogger(PerformanceMonitoringService.class);
 
     @Autowired
     private Counter reportGenerationCounter;
@@ -29,15 +24,18 @@ public class PerformanceMonitoringService {
 
     @Autowired
     private Timer reportGenerationTimer;
-
-    /**
+    
+    // Simple counters for tracking active reports
+    private final AtomicInteger activeReports = new AtomicInteger(0);
+    private final AtomicInteger totalReports = new AtomicInteger(0);
+    private final AtomicInteger failedReports = new AtomicInteger(0);/**
      * Start monitoring a report generation process
      * @param reportId The ID of the report being generated
      * @return Timer sample for measuring duration
      */
     public Timer.Sample startReportGeneration(String reportId) {
         logger.info("Starting performance monitoring for report: {}", reportId);
-        metricsConfig.incrementActiveReportGenerations();
+        activeReports.incrementAndGet();
         
         // Log memory usage at start
         logMemoryUsage("Report generation started for: " + reportId);
@@ -54,8 +52,8 @@ public class PerformanceMonitoringService {
         Duration duration = Duration.ofNanos(durationNanos);
         
         // Update counters
-        metricsConfig.decrementActiveReportGenerations();
-        metricsConfig.incrementTotalReportsGenerated();
+        activeReports.decrementAndGet();
+        totalReports.incrementAndGet();
         reportGenerationCounter.increment();
         
         // Log completion metrics
@@ -81,8 +79,8 @@ public class PerformanceMonitoringService {
         Duration duration = Duration.ofNanos(durationNanos);
         
         // Update counters
-        metricsConfig.decrementActiveReportGenerations();
-        metricsConfig.incrementFailedReportsCount();
+        activeReports.decrementAndGet();
+        failedReports.incrementAndGet();
         reportFailureCounter.increment();
         
         // Log failure metrics
@@ -90,9 +88,7 @@ public class PerformanceMonitoringService {
                     reportId, duration.toMillis(), error.getMessage());
         
         logMemoryUsage("Report generation failed for: " + reportId);
-    }
-
-    /**
+    }    /**
      * Get current performance metrics
      */
     public PerformanceMetrics getCurrentMetrics() {
@@ -102,9 +98,9 @@ public class PerformanceMonitoringService {
         long usedMemory = totalMemory - freeMemory;
         
         return new PerformanceMetrics(
-            metricsConfig.getActiveReportGenerations(),
-            metricsConfig.getTotalReportsGenerated(),
-            metricsConfig.getFailedReportsCount(),
+            activeReports.get(),
+            totalReports.get(),
+            failedReports.get(),
             usedMemory,
             totalMemory,
             calculateSuccessRate()
@@ -127,14 +123,12 @@ public class PerformanceMonitoringService {
                    freeMemory / (1024 * 1024),
                    totalMemory / (1024 * 1024),
                    maxMemory / (1024 * 1024));
-    }
-
-    /**
+    }    /**
      * Calculate success rate percentage
      */
     private double calculateSuccessRate() {
-        int total = metricsConfig.getTotalReportsGenerated();
-        int failed = metricsConfig.getFailedReportsCount();
+        int total = totalReports.get();
+        int failed = failedReports.get();
         
         if (total == 0) {
             return 100.0; // No reports generated yet

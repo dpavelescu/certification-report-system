@@ -3,7 +3,6 @@ package com.certreport.controller;
 import com.certreport.service.PerformanceMonitoringService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/metrics")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class MetricsController {
 
     @Autowired

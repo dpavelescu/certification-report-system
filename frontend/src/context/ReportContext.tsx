@@ -17,7 +17,12 @@ interface ReportContextType {
   deselectEmployee: (employeeId: string) => void;
   selectAllEmployees: () => void;
   clearSelection: () => void;
-  generateReport: (reportType: string) => Promise<void>;
+  generateReport: (reportType: string, filterParams?: {
+    employeeIds?: string[];
+    certificationIds?: string[];
+    startDate?: string;
+    endDate?: string;
+  }) => Promise<void>;
   refreshReportStatus: (reportId: string) => Promise<void>;  downloadReport: (reportId: string) => Promise<void>;
   deleteReport: (reportId: string) => Promise<void>;
   regenerateReport: (reportId: string) => Promise<void>;
@@ -95,9 +100,16 @@ export const ReportProvider: React.FC<ReportProviderProps> = ({ children }) => {
   const clearSelection = useCallback(() => {
     setSelectedEmployees([]);
   }, []);
-
-  const generateReport = useCallback(async (reportType: string) => {
-    if (selectedEmployees.length === 0) {
+  const generateReport = useCallback(async (reportType: string, filterParams?: {
+    employeeIds?: string[];
+    certificationIds?: string[];
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    // Use filter params if provided, otherwise fall back to selected employees
+    const employeeIds = filterParams?.employeeIds || selectedEmployees.map(emp => emp.id);
+    
+    if (employeeIds.length === 0) {
       setError('Please select at least one employee');
       return;
     }
@@ -106,8 +118,11 @@ export const ReportProvider: React.FC<ReportProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
       const request: ReportRequest = {
-        employeeIds: selectedEmployees.map(emp => emp.id),
-        reportType
+        employeeIds,
+        reportType,
+        ...(filterParams?.certificationIds && { certificationIds: filterParams.certificationIds }),
+        ...(filterParams?.startDate && { startDate: filterParams.startDate }),
+        ...(filterParams?.endDate && { endDate: filterParams.endDate })
       };
       const newReport = await apiClient.generateReport(request);
       setReports(prev => [newReport, ...prev]);
