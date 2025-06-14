@@ -6,7 +6,7 @@ This directory contains the database configuration and initialization scripts fo
 
 ### Docker Setup
 - `docker-compose.yml` - PostgreSQL and pgAdmin containers
-- `init-data.sql` - Sample employee data and database optimization
+- `init.sql` - Database initialization and sample data
 
 ## Quick Start
 
@@ -40,11 +40,11 @@ The system includes 15 sample employees across different departments:
 ## Database Schema
 
 The Spring Boot application will automatically create the necessary tables:
-- `employees` - Employee information
+- `employees` - Employee information  
+- `certifications` - Employee certification records
+- `certification_definitions` - Available certification types
+- `stages` - Certification progress stages
+- `tasks` - Individual certification tasks
 - `reports` - Report generation tracking
 
-Indexes are created for optimal query performance on:
-- Department filtering
-- Manager relationships
-- Email lookups
-- Report status tracking
+The system uses efficient batch queries with JOIN FETCH for optimal performance.

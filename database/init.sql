@@ -29,11 +29,8 @@ CREATE TABLE IF NOT EXISTS reports (
     error_message TEXT
 );
 
--- Create indexes for better performance
+-- Create essential indexes only (email lookup is commonly used)
 CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email);
-CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department);
-CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
-CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(type);
 
 -- Insert sample employee data
 INSERT INTO employees (id, first_name, last_name, email, department, position, hire_date, created_at, updated_at) VALUES 

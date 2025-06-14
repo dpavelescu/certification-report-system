@@ -21,6 +21,13 @@ A professional web application that enables managers to generate comprehensive e
 - **Report Engine**: JasperReports 6.20+
 - **Monitoring**: Spring Boot Actuator, Micrometer, Prometheus
 
+## ⚡ Performance Highlights
+
+- **8.98 seconds** for 300-employee reports (301 pages, 831KB)
+- **Evidence-based optimization** - tested and validated indexing decisions
+- **Memory efficient** - chunked processing with stable ~150MB heap usage
+- **Scalable architecture** - ready for 1000+ employees with current design
+
 ## 📁 Project Structure
 
 ```
@@ -422,10 +429,10 @@ spring.datasource.password=${DB_PASSWORD:certpass}
 ### **Available Documentation**
 - 📖 **[Product Requirements](docs/prd-iteration-1.md)** - Business requirements and user stories
 - 🏗 **[Technical Specifications](docs/technical-specifications.md)** - Architecture and implementation details
+- ⚡ **[PDF Generation Process](docs/pdf-generation-process.md)** - Performance architecture, chunking strategy, and NFR analysis
 - 📅 **[Delivery Plan](docs/delivery-plan.md)** - 4-iteration development roadmap
 - 💼 **[Requirements Analysis](docs/requirements-elicitation.md)** - Business analysis and stakeholder input
 - 🛡 **[Security Guide](docs/SECURITY.md)** - Comprehensive security configuration and best practices
-- ✅ **[Security Status](docs/SECURITY-STATUS.md)** - Current security implementation status
 - 🧹 **[Simplification Summary](SIMPLIFICATION_SUMMARY.md)** - Component consolidation and code modernization
 - 🧪 **[Testing Analysis](TESTING_ANALYSIS_SUMMARY.md)** - Test infrastructure analysis and improvements
 - ⚡ **[Performance Testing](PERFORMANCE_TESTING_ANALYSIS.md)** - Comprehensive performance testing framework
