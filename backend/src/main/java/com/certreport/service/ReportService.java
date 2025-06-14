@@ -6,7 +6,6 @@ import com.certreport.dto.CompleteReportDataDto;
 import com.certreport.dto.CertificationDto;
 import com.certreport.dto.EmployeeCertificationActivityDto;
 import com.certreport.model.Report;
-import com.certreport.model.Certification;
 import com.certreport.repository.ReportRepository;
 import io.micrometer.core.instrument.Timer;
 import net.sf.jasperreports.engine.*;
@@ -26,19 +25,23 @@ import java.util.stream.Collectors;
 
 @Service
 public class ReportService {
-      private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
+    
+    private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
+    
     private final ReportRepository reportRepository;
     private final EmployeeService employeeService;
     private final CertificationService certificationService;
-    private final PerformanceMonitoringService performanceMonitoringService;
-      public ReportService(ReportRepository reportRepository, 
+    private final ActuatorPerformanceMonitor actuatorPerformanceMonitor;
+
+    public ReportService(ReportRepository reportRepository, 
                         EmployeeService employeeService,
                         CertificationService certificationService,
-                        PerformanceMonitoringService performanceMonitoringService) {
+                        ActuatorPerformanceMonitor actuatorPerformanceMonitor) {
         this.reportRepository = reportRepository;
         this.employeeService = employeeService;
         this.certificationService = certificationService;
-        this.performanceMonitoringService = performanceMonitoringService;    }
+        this.actuatorPerformanceMonitor = actuatorPerformanceMonitor;
+    }
 
     public Report generateReport(ReportRequestDto request) {
         // Generate report name based on type and timestamp
@@ -56,7 +59,14 @@ public class ReportService {
         
         // Start async processing
         generateReportAsync(report);
-          return report;    }    private String generateCertificationsPdfReport(List<CompleteReportDataDto> reportData, String reportId) throws JRException {
+        
+        return report;
+    }
+
+    private String generateCertificationsPdfReport(List<CompleteReportDataDto> reportData, String reportId) throws JRException {
+        // Record memory snapshot for PDF generation start
+        actuatorPerformanceMonitor.recordMemorySnapshot(reportId, "PDF Generation Start");
+        
         // Load the certifications report template
         InputStream reportTemplate = getClass().getResourceAsStream("/reports/certifications_report.jrxml");
         if (reportTemplate == null) {
@@ -65,6 +75,7 @@ public class ReportService {
         
         // Compile report
         JasperReport jasperReport = JasperCompileManager.compileReport(reportTemplate);
+        actuatorPerformanceMonitor.recordMemorySnapshot(reportId, "Template Compiled");
         
         // Create flattened data structure for individual certification activities
         List<EmployeeCertificationActivityDto> activityData = createActivityDataFromReportData(reportData);
@@ -98,8 +109,29 @@ public class ReportService {
         parameters.put("IN_PROGRESS_CERTIFICATIONS", inProgressCertifications);
         parameters.put("FAILED_CERTIFICATIONS", failedCertifications);
         
-        // Fill report
-        JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
+        actuatorPerformanceMonitor.recordMemorySnapshot(reportId, "Data Prepared");
+        
+        JasperPrint jasperPrint;
+        int actualPageCount;
+        
+        try {
+            // Fill report
+            jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
+            
+            // Extract actual page count from JasperPrint
+            actualPageCount = jasperPrint.getPages().size();
+            
+            // Save the page count to the report
+            Report report = reportRepository.findById(reportId).orElseThrow();
+            report.setPageCount(actualPageCount);
+            reportRepository.save(report);
+            
+        } catch (Exception e) {
+            logger.error("Error in PDF generation: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to generate PDF: " + e.getMessage(), e);
+        }
+        
+        actuatorPerformanceMonitor.recordMemorySnapshot(reportId, "Report Filled");
         
         // Export to PDF
         String fileName = String.format("CertificationReport_%s_%s.pdf", 
@@ -109,25 +141,29 @@ public class ReportService {
         
         JasperExportManager.exportReportToPdfFile(jasperPrint, filePath);
         
-        logger.info("Generated certifications report with {} employees and {} certification activities", 
-                   reportData.size(), activityData.size());
+        // Get actual file size
+        File generatedFile = new File(filePath);
+        long fileSizeBytes = generatedFile.exists() ? generatedFile.length() : 0;
+        
+        // Record final memory snapshot
+        actuatorPerformanceMonitor.recordMemorySnapshot(reportId, "PDF Generation Complete");
+        
+        logger.info("Generated certifications report with {} employees, {} certification activities, {} pages, {} KB", 
+                   reportData.size(), activityData.size(), actualPageCount, fileSizeBytes / 1024);
         
         return filePath;
-    }
-    
-    private int calculatePageCount(int employeeCount) {
-        // Simple calculation: approximately 20 employees per page
-        return Math.max(1, (int) Math.ceil(employeeCount / 20.0));
     }
     
     public Report getReportStatus(String reportId) {
         return reportRepository.findById(reportId)
                 .orElseThrow(() -> new RuntimeException("Report not found: " + reportId));
     }
-      public List<Report> getAllReports() {
+    
+    public List<Report> getAllReports() {
         return reportRepository.findAllByOrderByCreatedAtDesc();
     }
-      public File getReportFile(String reportId) {
+    
+    public File getReportFile(String reportId) {
         Report report = getReportStatus(reportId);
         if (report.getStatus() != Report.ReportStatus.COMPLETED || report.getFilePath() == null) {
             throw new RuntimeException("Report not ready for download: Status is " + report.getStatus());
@@ -151,14 +187,18 @@ public class ReportService {
         return String.format("%s_report_%d_employees_%s.pdf", 
             type.replace(" ", "_"), employeeCount, timestamp);
     }
-      private List<String> parseEmployeeIdsFromParameters(String parameters) {
-        // Parse employee IDs from parameters string like "ReportRequestDto{reportType='employee_demographics', employeeIds=[2, 5]}"
+
+    private List<String> parseEmployeeIdsFromParameters(String parameters) {
         if (parameters == null || parameters.trim().isEmpty()) {
-            logger.warn("Parameters is null or empty, returning empty employee ID list");
             return new ArrayList<>();
         }
         
         try {
+            // Check for empty employeeIds list first (employeeIds=[])
+            if (parameters.contains("employeeIds=[]")) {
+                return new ArrayList<>();
+            }
+            
             String pattern = "employeeIds=\\[([^\\]]+)\\]";
             java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
             java.util.regex.Matcher matcher = regex.matcher(parameters);
@@ -170,11 +210,18 @@ public class ReportService {
         } catch (Exception e) {
             logger.error("Error parsing employee IDs from parameters: {}", parameters, e);
         }
+        
         return new ArrayList<>();
     }
-      @Async
+
+    @Async
     public CompletableFuture<Void> generateReportAsync(Report report) {
-        Timer.Sample timerSample = performanceMonitoringService.startReportGeneration(report.getId());
+        // Start Actuator monitoring for execution time AND memory
+        Timer.Sample timerSample = actuatorPerformanceMonitor.startReportGeneration(
+            report.getId(),
+            0, // Will update with actual employee count
+            0  // Will update with actual page count
+        );
         
         try {
             // Parse employee IDs from report parameters
@@ -193,117 +240,104 @@ public class ReportService {
             report.setStatus(Report.ReportStatus.IN_PROGRESS);
             reportRepository.save(report);
             
+            // Record memory snapshot for data collection
+            actuatorPerformanceMonitor.recordMemorySnapshot(report.getId(), "Data Collection Start");
+            
             // Build complete report data with certification details
             List<CompleteReportDataDto> completeReportData = buildCompleteReportData(employeeIds);
+            
+            actuatorPerformanceMonitor.recordMemorySnapshot(report.getId(), "Data Collection Complete");
             
             // Generate PDF
             String filePath = generateCertificationsPdfReport(completeReportData, report.getId());
             
-            // Update report with completion
+            // Reload the report to get the updated page count (set inside generateCertificationsPdfReport)
+            report = reportRepository.findById(report.getId()).orElseThrow();
+            
+            // Get Actuator performance report with both timing and memory
+            ActuatorPerformanceMonitor.DetailedPerformanceReport performanceReport = 
+                actuatorPerformanceMonitor.completeReportGeneration(
+                    timerSample, 
+                    report.getId(),
+                    report.getPageCount() != null ? report.getPageCount() : 0,
+                    new File(filePath).length()
+                );
+            
+            // Update report with completion (page count already set in generateCertificationsPdfReport)
             report.setStatus(Report.ReportStatus.COMPLETED);
             report.setFilePath(filePath);
             report.setCompletedAt(LocalDateTime.now());
-            report.setPageCount(calculatePageCount(completeReportData.size()));
             reportRepository.save(report);
             
-            performanceMonitoringService.completeReportGeneration(timerSample, report.getId());
-            
-            logger.info("Successfully completed async report generation for report {}", report.getId());
+            logger.info("Successfully completed async report generation for report {} - {} pages, {} KB, {} ms", 
+                       report.getId(), 
+                       report.getPageCount(),
+                       new File(filePath).length() / 1024,
+                       performanceReport.durationMs);
             
         } catch (Exception e) {
             logger.error("Error generating report {}: {}", report.getId(), e.getMessage(), e);
+            
+            // Complete Actuator monitoring even on failure to capture error metrics
+            try {
+                actuatorPerformanceMonitor.completeReportGeneration(timerSample, report.getId(), 0, 0L);
+            } catch (Exception monitoringException) {
+                logger.warn("Failed to complete performance monitoring for failed report {}: {}", 
+                           report.getId(), monitoringException.getMessage());
+            }
             
             // Update report with error status
             report.setStatus(Report.ReportStatus.FAILED);
             report.setErrorMessage(e.getMessage());
             report.setCompletedAt(LocalDateTime.now());
             reportRepository.save(report);
-            
-            performanceMonitoringService.recordReportGenerationFailure(timerSample, report.getId(), e);
         }
         
         return CompletableFuture.completedFuture(null);
     }
     
     /**
-     * Builds complete report data with detailed certification information including stages and tasks
+     * Builds complete report data with detailed certification information using efficient batch queries
      */
     private List<CompleteReportDataDto> buildCompleteReportData(List<String> employeeIds) {
-        List<CompleteReportDataDto> reportData = new ArrayList<>();
+        logger.info("Building complete report data for {} employees using efficient batch queries", employeeIds.size());
         
-        // Get employee data
-        List<EmployeeDto> employees = employeeService.getEmployeesByIds(employeeIds);
+        // Use efficient batch querying to get all data with minimal database round trips
+        List<CompleteReportDataDto> reportData;
         
-        for (EmployeeDto employee : employees) {
-            // Get detailed certifications for each employee including stage progress
-            List<CertificationDto> certifications = certificationService.getCertificationsByEmployeeId(employee.getId());
+        if (employeeIds.size() <= 100) {
+            // For smaller datasets, get all data in one chunk
+            reportData = certificationService.getCertificationDataChunk(employeeIds);
+        } else {
+            // For larger datasets, process in chunks to manage memory efficiently
+            reportData = new ArrayList<>();
+            int chunkSize = 50; // Process 50 employees at a time
             
-            // Enrich certification data with proper sorting
-            certifications = enrichAndSortCertificationData(certifications);
-            
-            CompleteReportDataDto employeeReportData = new CompleteReportDataDto(employee, certifications);
-            reportData.add(employeeReportData);
+            for (int i = 0; i < employeeIds.size(); i += chunkSize) {
+                int endIndex = Math.min(i + chunkSize, employeeIds.size());
+                List<String> chunk = employeeIds.subList(i, endIndex);
+                
+                List<CompleteReportDataDto> chunkData = certificationService.getCertificationDataChunk(chunk);
+                reportData.addAll(chunkData);
+                
+                logger.debug("Processed chunk {}/{} ({} employees)", 
+                           (i / chunkSize) + 1, 
+                           (employeeIds.size() + chunkSize - 1) / chunkSize,
+                           chunk.size());
+            }
         }
         
-        // Sort employees by department, then by last name
+        // Sort employees by department, then by last name (already sorted in query but ensure consistency)
         reportData.sort((a, b) -> {
             int deptCompare = a.getEmployee().getDepartment().compareTo(b.getEmployee().getDepartment());
             if (deptCompare != 0) return deptCompare;
             return a.getEmployee().getLastName().compareTo(b.getEmployee().getLastName());
         });
         
-        logger.info("Built complete report data for {} employees with detailed certification information", reportData.size());
+        logger.info("Built complete report data for {} employees with efficient batch queries", reportData.size());
         return reportData;
     }
-    
-    /**
-     * Enriches certification data with proper sorting for comprehensive reporting
-     */
-    private List<CertificationDto> enrichAndSortCertificationData(List<CertificationDto> certifications) {
-        if (certifications == null || certifications.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        // Sort certifications by status priority (Completed, In-Progress, Failed, others)
-        // Then by certification name
-        return certifications.stream()
-                .sorted((a, b) -> {
-                    // First sort by status priority
-                    int statusPriority1 = getStatusPriority(a.getStatus());
-                    int statusPriority2 = getStatusPriority(b.getStatus());
-                    
-                    if (statusPriority1 != statusPriority2) {
-                        return Integer.compare(statusPriority1, statusPriority2);
-                    }
-                    
-                    // Then by certification name
-                    String name1 = a.getCertificationDefinition() != null ? 
-                            a.getCertificationDefinition().getName() : "";
-                    String name2 = b.getCertificationDefinition() != null ? 
-                            b.getCertificationDefinition().getName() : "";
-                    return name1.compareTo(name2);
-                })
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Returns priority for certification status sorting
-     */
-    private int getStatusPriority(Certification.CertificationStatus status) {
-        if (status == null) return 99;
-        
-        switch (status) {
-            case COMPLETED: return 1;
-            case IN_PROGRESS: return 2;
-            case FAILED: return 3;
-            case OVERDUE: return 4;
-            case SUSPENDED: return 5;
-            case EXPIRED: return 6;
-            case NOT_STARTED: return 7;
-            default: return 8;
-        }
-    }
-    
+
     /**
      * Creates flattened activity data where each record represents an employee-certification combination
      */

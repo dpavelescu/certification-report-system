@@ -6,7 +6,7 @@ import com.certreport.repository.ReportRepository;
 import com.certreport.service.ReportService;
 import com.certreport.service.EmployeeService;
 import com.certreport.service.CertificationService;
-import com.certreport.service.PerformanceMonitoringService;
+import com.certreport.service.ActuatorPerformanceMonitor;
 import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,13 +35,11 @@ public class ReportServiceTest {
     private ReportRepository reportRepository;
 
     @Mock
-    private EmployeeService employeeService;
-
-    @Mock
+    private EmployeeService employeeService;    @Mock
     private CertificationService certificationService;
 
     @Mock
-    private PerformanceMonitoringService performanceMonitoringService;
+    private ActuatorPerformanceMonitor actuatorPerformanceMonitor;
 
     @InjectMocks
     private ReportService reportService;
@@ -57,11 +55,9 @@ public class ReportServiceTest {
 
         testRequest = new ReportRequestDto();
         testRequest.setEmployeeIds(Arrays.asList("EMP001", "EMP002"));
-        testRequest.setReportType("EMPLOYEE_DEMOGRAPHICS");
-
-        // Mock the dependencies for async processing
+        testRequest.setReportType("EMPLOYEE_DEMOGRAPHICS");        // Mock the dependencies for async processing
         Timer.Sample mockSample = mock(Timer.Sample.class);
-        when(performanceMonitoringService.startReportGeneration(anyString())).thenReturn(mockSample);
+        when(actuatorPerformanceMonitor.startReportGeneration(anyString(), anyInt(), anyInt())).thenReturn(mockSample);
         
         // Mock employee service to return empty list to avoid complex setup
         when(employeeService.getEmployeesByIds(anyList())).thenReturn(Collections.emptyList());

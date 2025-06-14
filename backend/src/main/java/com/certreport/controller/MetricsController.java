@@ -1,6 +1,6 @@
 package com.certreport.controller;
 
-import com.certreport.service.PerformanceMonitoringService;
+import com.certreport.service.ActuatorPerformanceMonitor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,64 +15,63 @@ import org.springframework.web.bind.annotation.RestController;
 public class MetricsController {
 
     @Autowired
-    private PerformanceMonitoringService performanceMonitoringService;
-
-    /**
+    private ActuatorPerformanceMonitor actuatorPerformanceMonitor;    /**
      * Get current performance metrics
      */
     @GetMapping("/performance")
-    public ResponseEntity<PerformanceMonitoringService.PerformanceMetrics> getPerformanceMetrics() {
-        PerformanceMonitoringService.PerformanceMetrics metrics = 
-            performanceMonitoringService.getCurrentMetrics();
+    public ResponseEntity<ActuatorPerformanceMonitor.MemoryMetrics> getPerformanceMetrics() {
+        ActuatorPerformanceMonitor.MemoryMetrics metrics = 
+            actuatorPerformanceMonitor.getDetailedMemoryMetrics();
         return ResponseEntity.ok(metrics);
-    }
-
-    /**
+    }    /**
      * Get health status of the report generation system
      */
     @GetMapping("/health")
     public ResponseEntity<HealthStatus> getHealthStatus() {
-        PerformanceMonitoringService.PerformanceMetrics metrics = 
-            performanceMonitoringService.getCurrentMetrics();
+        ActuatorPerformanceMonitor.MemoryMetrics memoryMetrics = 
+            actuatorPerformanceMonitor.getDetailedMemoryMetrics();
+        ActuatorPerformanceMonitor.DatabaseMetrics dbMetrics = 
+            actuatorPerformanceMonitor.getDatabaseMetrics();
             
-        // Calculate memory usage percentage
-        double memoryUsagePercent = (double) metrics.getUsedMemory() / metrics.getTotalMemory() * 100;
+        // Calculate memory usage percentage (heap used vs heap max)
+        double memoryUsagePercent = memoryMetrics.heapMaxMB > 0 ? 
+            (double) memoryMetrics.heapUsedMB / memoryMetrics.heapMaxMB * 100 : 0;
         
         // Determine health status based on metrics
         String status = "healthy";
         String message = "System is operating normally";
         
-        if (metrics.getActiveReports() > 10) {
-            status = "warning";
-            message = "High number of active report generations";
-        } else if (memoryUsagePercent > 90) {
+        if (memoryUsagePercent > 90) {
             status = "critical";
             message = "High memory usage detected";
-        } else if (metrics.getSuccessRate() < 90) {
+        } else if (memoryUsagePercent > 75) {
             status = "warning";
-            message = "Report generation success rate below 90%";
+            message = "Memory usage is elevated";
         }
         
-        return ResponseEntity.ok(new HealthStatus(status, message, metrics));
+        return ResponseEntity.ok(new HealthStatus(status, message, memoryMetrics, dbMetrics));
     }
-    
-    /**
+      /**
      * Health status response class
      */
     public static class HealthStatus {
         private final String status;
         private final String message;
-        private final PerformanceMonitoringService.PerformanceMetrics metrics;
+        private final ActuatorPerformanceMonitor.MemoryMetrics memoryMetrics;
+        private final ActuatorPerformanceMonitor.DatabaseMetrics databaseMetrics;
         
         public HealthStatus(String status, String message, 
-                           PerformanceMonitoringService.PerformanceMetrics metrics) {
+                           ActuatorPerformanceMonitor.MemoryMetrics memoryMetrics,
+                           ActuatorPerformanceMonitor.DatabaseMetrics databaseMetrics) {
             this.status = status;
             this.message = message;
-            this.metrics = metrics;
+            this.memoryMetrics = memoryMetrics;
+            this.databaseMetrics = databaseMetrics;
         }
         
         public String getStatus() { return status; }
         public String getMessage() { return message; }
-        public PerformanceMonitoringService.PerformanceMetrics getMetrics() { return metrics; }
+        public ActuatorPerformanceMonitor.MemoryMetrics getMemoryMetrics() { return memoryMetrics; }
+        public ActuatorPerformanceMonitor.DatabaseMetrics getDatabaseMetrics() { return databaseMetrics; }
     }
 }

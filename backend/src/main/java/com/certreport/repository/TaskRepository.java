@@ -51,4 +51,11 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     @Query("SELECT SUM(t.actualHours) FROM Task t WHERE t.stage.certification.id = :certificationId AND t.status = 'COMPLETED'")
     Double sumActualHoursByCertificationId(@Param("certificationId") String certificationId);
+    
+    // Efficient batch queries for reporting
+    @Query("SELECT t FROM Task t " +
+           "JOIN FETCH t.taskDefinition td " +
+           "WHERE t.stage.id IN :stageIds " +
+           "ORDER BY t.stage.id, td.sequenceOrder")
+    List<Task> findByStageIdsWithDetails(@Param("stageIds") List<String> stageIds);
 }

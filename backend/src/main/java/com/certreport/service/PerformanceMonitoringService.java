@@ -5,16 +5,17 @@ import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Service for monitoring and tracking performance metrics during report generation
+ * @deprecated Use ActuatorPerformanceMonitor instead for comprehensive monitoring
  */
-@Service
-public class PerformanceMonitoringService {    private static final Logger logger = LoggerFactory.getLogger(PerformanceMonitoringService.class);
+@Deprecated
+// @Service  // Disabled - use ActuatorPerformanceMonitor instead
+public class PerformanceMonitoringService {private static final Logger logger = LoggerFactory.getLogger(PerformanceMonitoringService.class);
 
     @Autowired
     private Counter reportGenerationCounter;

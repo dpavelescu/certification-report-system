@@ -5,8 +5,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 @Entity
 @Table(name = "stages")
@@ -41,10 +41,8 @@ public class Stage {
     private Double completionPercentage = 0.0;
     
     @Column(columnDefinition = "TEXT")
-    private String notes;
-    
-    @OneToMany(mappedBy = "stage", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Task> tasks = new ArrayList<>();
+    private String notes;    @OneToMany(mappedBy = "stage", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private Set<Task> tasks = new LinkedHashSet<>();
     
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -102,9 +100,8 @@ public class Stage {
     
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
-    
-    public List<Task> getTasks() { return tasks; }
-    public void setTasks(List<Task> tasks) { this.tasks = tasks; }
+      public Set<Task> getTasks() { return tasks; }
+    public void setTasks(Set<Task> tasks) { this.tasks = tasks; }
     
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

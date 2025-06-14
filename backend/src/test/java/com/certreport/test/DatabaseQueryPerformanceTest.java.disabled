@@ -1,0 +1,155 @@
+package com.certreport.test;
+
+import com.certreport.dto.ReportRequestDto;
+import com.certreport.model.Report;
+import com.certreport.service.ReportService;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+
+import jakarta.persistence.EntityManagerFactory;
+import java.util.Arrays;
+import java.util.List;
+
+@SpringBootTest
+@ActiveProfiles("test")
+public class DatabaseQueryPerformanceTest {
+    
+    private static final Logger logger = LoggerFactory.getLogger(DatabaseQueryPerformanceTest.class);
+    
+    @Autowired
+    private ReportService reportService;
+    
+    @Autowired
+    private PerformanceTestDataSetup dataSetup;
+    
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+    
+    @Test
+    public void testReportGenerationQueryPerformance() throws Exception {
+        logger.info("=== Starting Database Query Performance Analysis ===");
+        
+        // Clear existing data and create test dataset
+        dataSetup.clearExistingData();
+        dataSetup.createDenseDataset();
+        
+        // Get Hibernate statistics
+        SessionFactory sessionFactory = entityManagerFactory.unwrap(SessionFactory.class);
+        Statistics stats = sessionFactory.getStatistics();
+        stats.setStatisticsEnabled(true);
+        stats.clear();
+        
+        // Record initial metrics
+        long initialQueryCount = stats.getQueryExecutionCount();
+        long initialEntityFetchCount = stats.getEntityFetchCount();
+        long initialCollectionFetchCount = stats.getCollectionFetchCount();
+        long initialSecondLevelCacheHitCount = stats.getSecondLevelCacheHitCount();
+        long initialQueryExecutionMaxTime = stats.getQueryExecutionMaxTime();
+        
+        logger.info("Initial Hibernate Statistics:");
+        logger.info("  Query Count: {}", initialQueryCount);
+        logger.info("  Entity Fetch Count: {}", initialEntityFetchCount);
+        logger.info("  Collection Fetch Count: {}", initialCollectionFetchCount);
+        logger.info("  Cache Hit Count: {}", initialSecondLevelCacheHitCount);
+        
+        // Test with a subset of employees first (30 employees)
+        List<String> testEmployeeIds = dataSetup.getCreatedEmployeeIds().subList(0, 30);
+        
+        logger.info("=== Generating Report for {} Employees ===", testEmployeeIds.size());
+        
+        ReportRequestDto reportRequest = new ReportRequestDto();
+        reportRequest.setEmployeeIds(testEmployeeIds);
+        reportRequest.setReportType("EMPLOYEE_CERTIFICATIONS");
+        
+        long startTime = System.currentTimeMillis();
+        
+        // Generate report
+        Report report = reportService.generateReport(reportRequest);
+        
+        // Wait for completion (since it's async)
+        int maxWaitSeconds = 60;
+        int waitCount = 0;
+        while (report.getStatus() == Report.ReportStatus.QUEUED || 
+               report.getStatus() == Report.ReportStatus.IN_PROGRESS) {
+            Thread.sleep(1000);
+            report = reportService.getReportStatus(report.getId());
+            waitCount++;
+            if (waitCount > maxWaitSeconds) {
+                break;
+            }
+        }
+        
+        long endTime = System.currentTimeMillis();
+        long totalTime = endTime - startTime;
+        
+        // Collect final statistics
+        long finalQueryCount = stats.getQueryExecutionCount();
+        long finalEntityFetchCount = stats.getEntityFetchCount();
+        long finalCollectionFetchCount = stats.getCollectionFetchCount();
+        long finalSecondLevelCacheHitCount = stats.getSecondLevelCacheHitCount();
+        long finalQueryExecutionMaxTime = stats.getQueryExecutionMaxTime();
+        
+        // Calculate differences
+        long totalQueries = finalQueryCount - initialQueryCount;
+        long totalEntityFetches = finalEntityFetchCount - initialEntityFetchCount;
+        long totalCollectionFetches = finalCollectionFetchCount - initialCollectionFetchCount;
+        long totalCacheHits = finalSecondLevelCacheHitCount - initialSecondLevelCacheHitCount;
+        
+        logger.info("=== Query Performance Analysis Results ===");
+        logger.info("Total Report Generation Time: {} ms ({} seconds)", totalTime, totalTime / 1000.0);
+        logger.info("Report Status: {}", report.getStatus());
+        if (report.getPageCount() != null) {
+            logger.info("Pages Generated: {}", report.getPageCount());
+        }
+        
+        logger.info("=== Database Query Statistics ===");
+        logger.info("Total Queries Executed: {}", totalQueries);
+        logger.info("Total Entity Fetches: {}", totalEntityFetches);
+        logger.info("Total Collection Fetches: {}", totalCollectionFetches);
+        logger.info("Cache Hits: {}", totalCacheHits);
+        logger.info("Max Query Execution Time: {} ms", finalQueryExecutionMaxTime);
+        
+        // Calculate queries per employee
+        double queriesPerEmployee = (double) totalQueries / testEmployeeIds.size();
+        logger.info("Queries Per Employee: {:.2f}", queriesPerEmployee);
+        
+        // Performance analysis
+        logger.info("=== Performance Analysis ===");
+        if (queriesPerEmployee > 10) {
+            logger.warn("HIGH: Queries per employee ({:.2f}) suggests N+1 query problem", queriesPerEmployee);
+        } else if (queriesPerEmployee > 5) {
+            logger.warn("MEDIUM: Queries per employee ({:.2f}) could be optimized", queriesPerEmployee);
+        } else {
+            logger.info("GOOD: Queries per employee ({:.2f}) seems efficient", queriesPerEmployee);
+        }
+        
+        if (totalCollectionFetches > totalQueries * 0.5) {
+            logger.warn("HIGH: Many collection fetches ({}) may indicate lazy loading issues", totalCollectionFetches);
+        }
+        
+        if (finalQueryExecutionMaxTime > 1000) {
+            logger.warn("HIGH: Slow query detected ({}ms) - may need indexing", finalQueryExecutionMaxTime);
+        }
+        
+        // Print slowest queries
+        String[] slowestQueries = stats.getQueries();
+        if (slowestQueries.length > 0) {
+            logger.info("=== Top Slow Queries ===");
+            for (int i = 0; i < Math.min(5, slowestQueries.length); i++) {
+                String query = slowestQueries[i];
+                long queryTime = stats.getQueryExecutionMaxTime(query);
+                long queryCount = stats.getQueryExecutionCount(query);
+                logger.info("Query {}: {} executions, max time: {}ms", i + 1, queryCount, queryTime);
+                logger.info("  SQL: {}", query.length() > 100 ? query.substring(0, 100) + "..." : query);
+            }
+        }
+        
+        logger.info("=== Analysis Complete ===");
+    }
+}

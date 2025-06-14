@@ -42,4 +42,11 @@ public interface StageRepository extends JpaRepository<Stage, String> {
     
     @Query("SELECT COUNT(s) FROM Stage s WHERE s.certification.id = :certificationId")
     Long countTotalStagesByCertificationId(@Param("certificationId") String certificationId);
+    
+    // Efficient batch queries for reporting
+    @Query("SELECT s FROM Stage s " +
+           "JOIN FETCH s.stageDefinition sd " +
+           "WHERE s.certification.id IN :certificationIds " +
+           "ORDER BY s.certification.id, sd.sequenceOrder")
+    List<Stage> findByCertificationIdsWithDetails(@Param("certificationIds") List<String> certificationIds);
 }

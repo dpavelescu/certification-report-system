@@ -11,7 +11,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,15 +33,14 @@ public class Iteration3ReportTest {
     
     @Autowired
     private CertificationService certificationService;
-    
-    @Autowired
+      @Autowired
     private ReportRepository reportRepository;
     
-    @Autowired
-    private EmployeeRepository employeeRepository;
+    // @Autowired
+    // private EmployeeRepository employeeRepository;
     
-    @Autowired
-    private CertificationRepository certificationRepository;
+    // @Autowired
+    // private CertificationRepository certificationRepository;
 
     private EmployeeDto testEmployee;
     private String testEmployeeId;

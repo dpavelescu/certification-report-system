@@ -10,13 +10,18 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 @Service
 @Transactional(readOnly = true)
 public class CertificationService {
+    
+    // private static final Logger logger = LoggerFactory.getLogger(CertificationService.class);
     
     private final CertificationRepository certificationRepository;
     private final CertificationDefinitionRepository certificationDefinitionRepository;
@@ -210,5 +215,152 @@ public class CertificationService {
         dto.setPosition(employee.getPosition());
         dto.setHireDate(employee.getHireDate());
         return dto;
+    }
+    
+    // Efficient chunked data retrieval for reporting
+      /**
+     * Get certification data for a chunk of employees with all related data in ONE OPTIMIZED query
+     * This method replaces the previous 4-query + in-memory processing approach
+     */    public List<CompleteReportDataDto> getCertificationDataChunk(List<String> employeeIds) {
+        if (employeeIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Single comprehensive query - gets ALL data in one go
+        List<Certification> certifications = certificationRepository.findCompleteReportDataByEmployeeIds(employeeIds);
+        
+        // Group certifications by employee (minimal in-memory processing)
+        Map<String, List<Certification>> certificationsByEmployee = certifications.stream()
+                .collect(Collectors.groupingBy(cert -> cert.getEmployee().getId()));
+        
+        // Convert to DTOs efficiently - all data is already loaded
+        List<CompleteReportDataDto> result = new ArrayList<>();
+        for (Map.Entry<String, List<Certification>> entry : certificationsByEmployee.entrySet()) {
+            Employee employee = entry.getValue().get(0).getEmployee(); // Employee is already loaded
+            
+            // Convert employee to DTO
+            EmployeeDto employeeDto = convertToDto(employee);
+            
+            // Convert certifications to DTOs - no additional queries needed since everything is pre-loaded
+            List<CertificationDto> certificationDtos = entry.getValue().stream()
+                    .map(this::convertToDetailedDtoWithPreloadedData)
+                    .collect(Collectors.toList());
+            
+            result.add(new CompleteReportDataDto(employeeDto, certificationDtos));
+        }
+          // Handle employees with no certifications
+        List<String> employeesWithCerts = result.stream()
+                .map(data -> data.getEmployee().getId())
+                .collect(Collectors.toList());
+        
+        List<String> employeesWithoutCerts = employeeIds.stream()
+                .filter(id -> !employeesWithCerts.contains(id))
+                .collect(Collectors.toList());
+          if (!employeesWithoutCerts.isEmpty()) {
+            List<Employee> employeesWithoutCertifications = employeeRepository.findAllById(employeesWithoutCerts);
+            
+            for (Employee employee : employeesWithoutCertifications) {
+                EmployeeDto employeeDto = convertToDto(employee);
+                result.add(new CompleteReportDataDto(employeeDto, new ArrayList<>()));
+            }
+        }
+        return result;
+    }
+      /**
+     * Get certification data in chunks for memory-efficient processing
+     */
+    public List<CompleteReportDataDto> getAllCertificationDataChunked(int chunkSize) {
+        List<CompleteReportDataDto> allData = new ArrayList<>();
+        int page = 0;
+        List<String> employeeChunk;
+        
+        do {
+            // Get employee IDs in chunks using pagination
+            employeeChunk = employeeRepository.findEmployeeIdsChunked(page, chunkSize);
+            
+            if (!employeeChunk.isEmpty()) {
+                List<CompleteReportDataDto> chunkData = getCertificationDataChunk(employeeChunk);
+                allData.addAll(chunkData);
+                page++;
+            }
+        } while (employeeChunk.size() == chunkSize); // Continue if we got a full chunk
+        
+        return allData;
+    }    /**
+     * Conversion using pre-loaded data from comprehensive query - ZERO additional queries
+     * All data (employee, cert def, stages, stage defs, tasks, task defs) is already loaded
+     */
+    private CertificationDto convertToDetailedDtoWithPreloadedData(Certification certification) {
+        CertificationDto dto = new CertificationDto();
+        dto.setId(certification.getId());
+        dto.setStatus(certification.getStatus());
+        dto.setCompletionPercentage(certification.getCompletionPercentage());
+        dto.setEnrolledAt(certification.getEnrolledAt());
+        dto.setCompletedAt(certification.getCompletedAt());
+        dto.setDueDate(certification.getDueDate());
+        
+        // Convert certification definition (already loaded via JOIN FETCH)
+        if (certification.getCertificationDefinition() != null) {
+            dto.setCertificationDefinition(convertToDto(certification.getCertificationDefinition()));
+        }
+        
+        // Convert employee (already loaded via JOIN FETCH)
+        if (certification.getEmployee() != null) {
+            dto.setEmployee(convertToDto(certification.getEmployee()));
+        }        // Convert stages with all related data (already loaded via LEFT JOIN FETCH)
+        if (certification.getStages() != null && !certification.getStages().isEmpty()) {
+            List<StageProgressDto> stageProgress = certification.getStages().stream()
+                    .sorted(Comparator.comparing(stage -> stage.getStageDefinition().getSequenceOrder()))
+                    .map(this::convertToStageProgressDtoWithPreloadedData)
+                    .collect(Collectors.toList());
+            dto.setStageProgress(stageProgress);
+            
+            // Set current stage information
+            Optional<Stage> currentStage = certification.getStages().stream()
+                    .filter(stage -> stage.getStatus() == Stage.StageStatus.IN_PROGRESS)
+                    .findFirst();
+            
+            if (currentStage.isPresent()) {
+                Stage stage = currentStage.get();
+                dto.setCurrentStageId(stage.getId());
+                dto.setCurrentStageName(stage.getStageDefinition().getName());
+                dto.setCurrentStageSequence(stage.getStageDefinition().getSequenceOrder());
+            }
+        }
+        
+        return dto;
+    }
+    
+    /**
+     * Convert stage with pre-loaded task data - ZERO additional queries
+     */
+    private StageProgressDto convertToStageProgressDtoWithPreloadedData(Stage stage) {
+        StageProgressDto dto = new StageProgressDto();
+        dto.setId(stage.getId());
+        dto.setStageDefinitionId(stage.getStageDefinition().getId());
+        dto.setName(stage.getStageDefinition().getName());
+        dto.setDescription(stage.getStageDefinition().getDescription());
+        dto.setSequenceOrder(stage.getStageDefinition().getSequenceOrder());
+        dto.setStatus(stage.getStatus());
+        dto.setCompletionPercentage(stage.getCompletionPercentage());
+        dto.setEstimatedDurationHours(stage.getStageDefinition().getEstimatedDurationHours());
+        dto.setIsMandatory(stage.getStageDefinition().getIsMandatory());
+        dto.setStartedAt(stage.getStartedAt());
+        dto.setCompletedAt(stage.getCompletedAt());
+        dto.setDueDate(stage.getDueDate());
+          // Calculate task progress from pre-loaded task data (tasks are already sorted by sequenceOrder)
+        if (stage.getTasks() != null) {
+            long totalTasks = stage.getTasks().size();
+            long completedTasks = stage.getTasks().stream()
+                    .mapToLong(task -> task.getStatus() == Task.TaskStatus.COMPLETED ? 1 : 0)
+                    .sum();
+            
+            dto.setCompletedTasks(completedTasks);
+            dto.setTotalTasks(totalTasks);
+        } else {
+            dto.setCompletedTasks(0L);
+            dto.setTotalTasks(0L);
+        }
+          return dto;
     }
 }
