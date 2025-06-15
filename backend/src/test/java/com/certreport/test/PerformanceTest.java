@@ -4,6 +4,7 @@ import com.certreport.dto.ReportRequestDto;
 import com.certreport.model.Report;
 import com.certreport.service.ReportService;
 import com.certreport.service.EmployeeService;
+import com.certreport.service.ActuatorPerformanceMonitor;
 import com.certreport.repository.ReportRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,134 +13,99 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Performance test using Spring Boot Actuator metrics for comprehensive performance analysis.
- * Focuses on detailed insights rather than rigid pass/fail thresholds.
+ * Comprehensive Actuator-based performance analysis test.
+ * Uses ONLY Spring Boot Actuator for non-intrusive monitoring.
+ * No manual timing, memory measurements, or GC calls.
  */
 @SpringBootTest
-@ActiveProfiles("test")
-public class PerformanceTest {    @Autowired
+@ActiveProfiles("postgres-test")
+public class ActuatorBasedPerformanceAnalysisTest {
+
+    @Autowired
     private ReportService reportService;
     
     @Autowired
     private EmployeeService employeeService;
       @Autowired
+    private ActuatorPerformanceMonitor actuatorPerformanceMonitor;
+      
+    @Autowired
     private ReportRepository reportRepository;
+      @Autowired
+    private DatabaseTestEnvironmentManager databaseTestEnvironmentManager;
 
     @BeforeEach
     public void setUp() {
-        // Force garbage collection before test
-        System.gc();
-        try {
-            Thread.sleep(1000); // Allow GC to complete
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }// Removed old basic performance test - replaced with comprehensive metrics-based analysis    // Removed old memory stability test - replaced with comprehensive metrics-based analysis    // Removed old large dataset test - replaced with comprehensive metrics-based analysis    // Removed old precise measurements test - functionality integrated into comprehensive metrics analysis
+        // Ensure clean test environment and create test data
+        databaseTestEnvironmentManager.ensureCleanEnvironment();
+        databaseTestEnvironmentManager.ensurePerformanceTestData();
+    }
 
     @Test
-    public void testComprehensiveMetricsAnalysis() {
-        System.out.println("=== COMPREHENSIVE METRICS-BASED PERFORMANCE ANALYSIS ===");
-        System.out.println("Using Spring Boot Actuator metrics for detailed performance insights");
-        System.out.println();        // Get current data context and record baseline metrics
+    public void testActuatorBasedPerformanceAnalysis() {
+        System.out.println("=== ACTUATOR-ONLY PERFORMANCE ANALYSIS ===");
+        System.out.println("Using Spring Boot Actuator for non-intrusive monitoring");
+        System.out.println();
+
+        // Get current data context
         long totalEmployees = employeeService.getAllEmployees().size();
-        Runtime runtime = Runtime.getRuntime();
-        long initialHeap = runtime.totalMemory() - runtime.freeMemory();
         
         System.out.println("Test Environment:");
         System.out.println("- Total Employees: " + totalEmployees);
-        System.out.println("- Baseline Memory: " + String.format("%.2f MB", initialHeap / (1024.0 * 1024.0)));
+        System.out.println("- Monitoring: 100% Actuator-based (non-intrusive)");
         System.out.println();
         
-        // Generate report with moderate dataset (10 employees)
-        List<String> testEmployeeIds = employeeService.getAllEmployees().stream()
-                .limit(10)
+        // Generate report with moderate dataset (first 10 employees)
+        List<String> employeeIds = employeeService.getAllEmployees().stream()
+                .limit(Math.min(10, totalEmployees))
                 .map(emp -> emp.getId())
                 .collect(Collectors.toList());
         
+        if (employeeIds.isEmpty()) {
+            fail("No employees available for performance testing. Please ensure test data is seeded.");
+        }
+        
+        System.out.println("Generating report for " + employeeIds.size() + " employees...");
+        
+        // Generate report - ActuatorPerformanceMonitor tracks everything automatically
         ReportRequestDto request = new ReportRequestDto();
-        request.setEmployeeIds(testEmployeeIds);
-        request.setReportType("CERTIFICATIONS");
-        
-        System.out.println("Generating report for " + testEmployeeIds.size() + " employees for metrics analysis...");
-        
-        // Record additional baseline metrics
-        long initialTotal = runtime.totalMemory();
-        long initialMax = runtime.maxMemory();
-        
-        // Measure generation with comprehensive metrics
-        long preciseStartTime = System.nanoTime();
+        request.setEmployeeIds(employeeIds);
+        request.setReportType("EMPLOYEE_DEMOGRAPHICS");
         
         Report report = reportService.generateReport(request);
+        Report completedReport = waitForReportCompletion(report.getId(), 30000);
         
-        // Monitor memory during generation
-        List<MemoryMeasurement> memoryTimeline = new ArrayList<>();
-        long monitoringStart = System.currentTimeMillis();
+        // Get Actuator-based metrics (non-intrusive)
+        ActuatorPerformanceMonitor.MemoryMetrics finalMemory = 
+            actuatorPerformanceMonitor.getDetailedMemoryMetrics();
         
-        // Wait for completion with memory monitoring
-        Report completedReport = waitForReportCompletionWithMemoryMonitoring(
-            report.getId(), 15000, memoryTimeline, monitoringStart);
-          long preciseEndTime = System.nanoTime();
+        ActuatorPerformanceMonitor.DatabaseMetrics dbMetrics = 
+            actuatorPerformanceMonitor.getDatabaseMetrics();
         
-        // Record final metrics
-        long finalHeap = runtime.totalMemory() - runtime.freeMemory();
-        long finalTotal = runtime.totalMemory();
+        // Present results using only Actuator data
+        presentActuatorAnalysis(completedReport, finalMemory, dbMetrics, employeeIds.size());
         
-        // Calculate comprehensive metrics
-        long preciseGenerationTimeMs = TimeUnit.NANOSECONDS.toMillis(preciseEndTime - preciseStartTime);
-        double preciseGenerationTimeSec = preciseGenerationTimeMs / 1000.0;
-        long heapDelta = finalHeap - initialHeap;
-        long totalMemoryDelta = finalTotal - initialTotal;
+        // Basic assertions
+        assertNotNull(completedReport);
+        assertEquals(Report.ReportStatus.COMPLETED, completedReport.getStatus());
+        assertNotNull(completedReport.getPageCount());
+        assertTrue(completedReport.getPageCount() > 0);
         
-        // Generate comprehensive metrics report
-        generateComprehensiveMetricsReport(
-            completedReport, 
-            preciseGenerationTimeMs,
-            preciseGenerationTimeSec,
-            testEmployeeIds.size(),
-            initialHeap, finalHeap, heapDelta,
-            initialTotal, finalTotal, totalMemoryDelta,
-            initialMax,
-            memoryTimeline
-        );
-        
-        // Validate report was generated successfully (no rigid thresholds)
-        assertNotNull(completedReport, "Report should be generated");
-        assertEquals(Report.ReportStatus.COMPLETED, completedReport.getStatus(), 
-                    "Report should complete successfully");
-        assertNotNull(completedReport.getPageCount(), "Page count should be available");
-        assertTrue(completedReport.getPageCount() > 0, "Should generate at least 1 page");
-        
-        System.out.println("✅ COMPREHENSIVE METRICS ANALYSIS COMPLETED");
-        System.out.println("   - Report generated successfully with detailed performance insights");
-        System.out.println("   - No rigid pass/fail thresholds - focus on understanding performance characteristics");
-        System.out.println();
-    }
-
-    private Report waitForReportCompletionWithMemoryMonitoring(
-            String reportId, long timeoutMs, List<MemoryMeasurement> memoryTimeline, long monitoringStart) {
-        
+        System.out.println("✅ ACTUATOR-BASED PERFORMANCE TEST COMPLETED");
+    }    private Report waitForReportCompletion(String reportId, long timeoutMs) {
+        // Note: This timing is for test infrastructure timeout, not performance measurement
         long startTime = System.currentTimeMillis();
         Report report;
         
         do {
             try {
-                Thread.sleep(200); // Check every 200ms for more granular monitoring
-                
-                // Record memory measurement
-                Runtime runtime = Runtime.getRuntime();
-                long currentTime = System.currentTimeMillis();
-                long elapsed = currentTime - monitoringStart;
-                long heapUsed = runtime.totalMemory() - runtime.freeMemory();
-                long totalMemory = runtime.totalMemory();
-                  memoryTimeline.add(new MemoryMeasurement(elapsed, heapUsed, totalMemory));
+                Thread.sleep(1000); // Check every second
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 fail("Test interrupted while waiting for report completion");
@@ -157,21 +123,13 @@ public class PerformanceTest {    @Autowired
         return report;
     }
 
-    private void generateComprehensiveMetricsReport(
+    private void presentActuatorAnalysis(
             Report report, 
-            long durationMs, 
-            double durationSec,
-            int employeeCount,
-            long initialHeap, 
-            long finalHeap, 
-            long heapDelta,
-            long initialTotal, 
-            long finalTotal, 
-            long totalMemoryDelta,
-            long maxMemory,
-            List<MemoryMeasurement> memoryTimeline) {
+            ActuatorPerformanceMonitor.MemoryMetrics finalMemory,
+            ActuatorPerformanceMonitor.DatabaseMetrics dbMetrics,
+            int employeeCount) {
         
-        System.out.println("=== COMPREHENSIVE PERFORMANCE METRICS REPORT ===");
+        System.out.println("=== ACTUATOR-BASED PERFORMANCE RESULTS ===");
         System.out.println();
         
         // Basic report information
@@ -180,6 +138,7 @@ public class PerformanceTest {    @Autowired
         System.out.println("- Status: " + report.getStatus());
         System.out.println("- Page Count: " + report.getPageCount());
         System.out.println("- Employee Count: " + employeeCount);
+        
         if (report.getFilePath() != null) {
             File reportFile = new File(report.getFilePath());
             if (reportFile.exists()) {
@@ -187,135 +146,65 @@ public class PerformanceTest {    @Autowired
                 System.out.println("- File Size: " + fileSizeKB + " KB");
             }
         }
-        System.out.println();
         
-        // Timing analysis
-        System.out.println("TIMING ANALYSIS:");
-        System.out.println("- Total Duration: " + durationMs + " ms (" + String.format("%.2f", durationSec) + " seconds)");
-        System.out.println("- Performance Category: " + categorizeTimingPerformance(durationMs));
-        
-        if (report.getPageCount() != null && report.getPageCount() > 0) {
-            double pagesPerSecond = report.getPageCount() / durationSec;
-            double employeesPerSecond = employeeCount / durationSec;
-            System.out.println("- Throughput: " + String.format("%.2f", pagesPerSecond) + " pages/second");
-            System.out.println("- Employee Processing Rate: " + String.format("%.2f", employeesPerSecond) + " employees/second");
-        }
-        System.out.println();
-        
-        // Memory analysis
-        System.out.println("MEMORY ANALYSIS:");
-        System.out.printf("- Initial Heap: %.2f MB%n", initialHeap / (1024.0 * 1024.0));
-        System.out.printf("- Final Heap: %.2f MB%n", finalHeap / (1024.0 * 1024.0));
-        System.out.printf("- Heap Delta: %.2f MB%n", heapDelta / (1024.0 * 1024.0));
-        System.out.printf("- Total Memory Delta: %.2f MB%n", totalMemoryDelta / (1024.0 * 1024.0));
-        System.out.printf("- Max Memory Available: %.2f MB%n", maxMemory / (1024.0 * 1024.0));
-        
-        double memoryUtilization = (finalHeap * 100.0) / maxMemory;
-        System.out.printf("- Memory Utilization: %.2f%%%n", memoryUtilization);
-        
-        System.out.println("- Memory Efficiency: " + categorizeMemoryPerformance(heapDelta, employeeCount));
-        System.out.println();
-        
-        // Memory timeline analysis
-        if (!memoryTimeline.isEmpty()) {
-            System.out.println("MEMORY TIMELINE ANALYSIS:");
-            long maxHeapUsed = memoryTimeline.stream().mapToLong(m -> m.heapUsed).max().orElse(0);
-            long minHeapUsed = memoryTimeline.stream().mapToLong(m -> m.heapUsed).min().orElse(0);
-            double avgHeapUsed = memoryTimeline.stream().mapToLong(m -> m.heapUsed).average().orElse(0);
+        // Timing analysis from report timestamps (non-intrusive)
+        if (report.getStartedAt() != null && report.getCompletedAt() != null) {
+            long durationMs = java.time.Duration.between(
+                report.getStartedAt(), report.getCompletedAt()).toMillis();
             
-            System.out.printf("- Peak Heap Usage: %.2f MB%n", maxHeapUsed / (1024.0 * 1024.0));
-            System.out.printf("- Minimum Heap Usage: %.2f MB%n", minHeapUsed / (1024.0 * 1024.0));
-            System.out.printf("- Average Heap Usage: %.2f MB%n", avgHeapUsed / (1024.0 * 1024.0));
-            System.out.printf("- Memory Fluctuation: %.2f MB%n", (maxHeapUsed - minHeapUsed) / (1024.0 * 1024.0));
+            System.out.println();
+            System.out.println("TIMING ANALYSIS (from report timestamps):");
+            System.out.println("- Generation Time: " + (durationMs / 1000.0) + " seconds");
             
-            // Show memory progression at key intervals
-            System.out.println("- Memory Progression:");
-            int intervalCount = Math.min(5, memoryTimeline.size());
-            for (int i = 0; i < intervalCount; i++) {
-                int index = (i * (memoryTimeline.size() - 1)) / Math.max(1, intervalCount - 1);
-                MemoryMeasurement measurement = memoryTimeline.get(index);
-                System.out.printf("  +%d ms: %.2f MB%n", 
-                    measurement.elapsedMs, measurement.heapUsed / (1024.0 * 1024.0));
+            if (report.getPageCount() != null && report.getPageCount() > 0 && durationMs > 0) {
+                double pagesPerSecond = (report.getPageCount() * 1000.0) / durationMs;
+                double employeesPerSecond = (employeeCount * 1000.0) / durationMs;
+                System.out.println("- Throughput: " + String.format("%.2f", pagesPerSecond) + " pages/second");
+                System.out.println("- Processing Rate: " + String.format("%.2f", employeesPerSecond) + " employees/second");
             }
         }
-        System.out.println();
         
-        // Performance insights and recommendations
-        System.out.println("PERFORMANCE INSIGHTS:");
-        providePerformanceInsights(durationMs, heapDelta, employeeCount, report.getPageCount());
+        // Actuator memory metrics (non-intrusive)
         System.out.println();
+        System.out.println("ACTUATOR MEMORY METRICS:");        System.out.println("- Current Heap: " + finalMemory.heapUsedMB + "MB / " + finalMemory.heapMaxMB + "MB");
+        System.out.println("- Non-Heap: " + finalMemory.nonHeapUsedMB + "MB");
+        System.out.println("- GC Time: " + finalMemory.gcTimeMs + "ms");
+        
+        // Database metrics (non-intrusive)
+        System.out.println();
+        System.out.println("DATABASE METRICS:");
+        System.out.println("- Active Connections: " + dbMetrics.activeConnections);
+        System.out.println("- Idle Connections: " + dbMetrics.idleConnections);
+        System.out.println("- Total Connections: " + dbMetrics.totalConnections);
+        
+        // Performance assessment (based on non-intrusive metrics)
+        System.out.println();
+        System.out.println("PERFORMANCE ASSESSMENT:");
+        
+        if (report.getStartedAt() != null && report.getCompletedAt() != null) {
+            long durationMs = java.time.Duration.between(
+                report.getStartedAt(), report.getCompletedAt()).toMillis();
+            
+            if (durationMs < 5000) {
+                System.out.println("✅ Generation time: EXCELLENT (< 5 seconds)");
+            } else if (durationMs < 15000) {
+                System.out.println("✅ Generation time: GOOD (< 15 seconds)");
+            } else {
+                System.out.println("⚠️ Generation time: ACCEPTABLE (> 15 seconds)");
+            }
+        }
+        
+        // Memory efficiency (based on current metrics, not deltas)
+        if (finalMemory.heapUsedMB < 100) {
+            System.out.println("✅ Memory usage: EFFICIENT (< 100MB)");
+        } else if (finalMemory.heapUsedMB < 300) {
+            System.out.println("✅ Memory usage: MODERATE (< 300MB)");
+        } else {
+            System.out.println("⚠️ Memory usage: HIGH (> 300MB)");
+        }
+        
+        System.out.println();
+        System.out.println("📊 NOTE: All metrics collected non-intrusively via Spring Boot Actuator");
+        System.out.println("🚀 This monitoring approach is production-ready and extensible");
     }
-
-    private String categorizeTimingPerformance(long durationMs) {
-        if (durationMs < 1000) return "⚡ EXCELLENT (< 1s)";
-        else if (durationMs < 3000) return "✅ VERY GOOD (< 3s)";
-        else if (durationMs < 5000) return "✅ GOOD (< 5s)";
-        else if (durationMs < 10000) return "⚠️ ACCEPTABLE (< 10s)";
-        else if (durationMs < 20000) return "⚠️ SLOW (< 20s)";
-        else return "❌ VERY SLOW (> 20s)";
-    }    private String categorizeMemoryPerformance(long heapDeltaBytes, int employeeCount) {
-        double heapDeltaMB = heapDeltaBytes / (1024.0 * 1024.0);
-        
-        if (Math.abs(heapDeltaMB) < 5) return "⚡ EXCELLENT (< 5MB total)";
-        else if (Math.abs(heapDeltaMB) < 20) return "✅ VERY GOOD (< 20MB total)";
-        else if (Math.abs(heapDeltaMB) < 50) return "✅ GOOD (< 50MB total)";
-        else if (Math.abs(heapDeltaMB) < 100) return "⚠️ MODERATE (< 100MB total)";
-        else return "❌ HIGH (> 100MB total)";
-    }private void providePerformanceInsights(long durationMs, long heapDelta, int employeeCount, Integer pageCount) {
-        double heapDeltaMB = heapDelta / (1024.0 * 1024.0);
-        double memoryPerEmployee = Math.abs(heapDeltaMB) / employeeCount;
-        double memoryPerPage = pageCount != null && pageCount > 0 ? Math.abs(heapDeltaMB) / pageCount : 0;
-        
-        System.out.println("📊 INSIGHTS & RECOMMENDATIONS:");
-        System.out.printf("   Memory per employee: %.2f MB%n", memoryPerEmployee);
-        if (pageCount != null && pageCount > 0) {
-            System.out.printf("   Memory per page: %.2f MB%n", memoryPerPage);
-        }
-        
-        // Timing insights
-        if (durationMs < 5000) {
-            System.out.println("✅ Generation time is excellent for this dataset size");
-        } else if (durationMs < 10000) {
-            System.out.println("✅ Generation time is within acceptable limits");
-        } else {
-            System.out.println("⚠️ Consider optimizing data retrieval and PDF generation");
-        }
-        
-        // Memory insights
-        if (Math.abs(heapDeltaMB) < 50) {
-            System.out.println("✅ Memory usage is reasonable for report generation");
-        } else {
-            System.out.println("⚠️ Memory usage is high - may include framework overhead or could be optimized");
-        }
-        
-        if (memoryPerEmployee < 1.0) {
-            System.out.println("✅ Efficient memory usage per employee");
-        } else {
-            System.out.println("⚠️ Consider optimizing data structures or implementing streaming for large datasets");
-        }
-        
-        // Scalability insights
-        double estimatedTimeFor1000 = (durationMs * 1000.0) / employeeCount;
-        double estimatedMemoryFor1000 = heapDeltaMB * (1000.0 / employeeCount);
-        
-        System.out.printf("📈 SCALABILITY PROJECTION (estimated for 1000 employees):%n");
-        System.out.printf("   - Estimated Time: %.1f seconds%n", estimatedTimeFor1000 / 1000.0);
-        System.out.printf("   - Estimated Memory: %.1f MB%n", estimatedMemoryFor1000);
-        
-        if (estimatedTimeFor1000 > 30000) {
-            System.out.println("⚠️ May need pagination or async processing for large datasets");
-        }
-        if (estimatedMemoryFor1000 > 500) {
-            System.out.println("⚠️ May need streaming or chunked processing for large datasets");
-        }
-    }    private static class MemoryMeasurement {
-        final long elapsedMs;
-        final long heapUsed;
-        
-        MemoryMeasurement(long elapsedMs, long heapUsed, long totalMemory) {
-            this.elapsedMs = elapsedMs;
-            this.heapUsed = heapUsed;
-            // totalMemory not stored as it's not used in analysis
-        }
-    }    // Removed unused test data setup methods - tests now use existing data// Removed old waitForReportCompletion method - replaced with metrics-based monitoring    // Removed old memory snapshot methods - replaced with Spring Boot Actuator metrics    // Removed old performance results printing method - replaced with comprehensive metrics reporting    // Removed old memory usage analysis method - integrated into comprehensive metrics analysis    // Removed old memory progression printing method - replaced with actuator-based memory timeline    // Removed old MemorySnapshot class - replaced with MemoryMeasurement for actuator-based metrics
 }

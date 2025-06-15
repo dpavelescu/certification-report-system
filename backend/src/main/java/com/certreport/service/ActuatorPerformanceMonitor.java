@@ -3,12 +3,15 @@ package com.certreport.service;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.actuate.metrics.MetricsEndpoint;
 import org.springframework.stereotype.Service;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,6 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Service
 public class ActuatorPerformanceMonitor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ActuatorPerformanceMonitor.class);
 
     private final MeterRegistry meterRegistry;
     private final MetricsEndpoint metricsEndpoint;
@@ -49,10 +54,8 @@ public class ActuatorPerformanceMonitor {
                 .register(meterRegistry);
                 
         this.activeReportsGauge = meterRegistry.gauge("report.generation.active", new AtomicLong(0));
-    }
-
-    /**
-     * Start monitoring a report generation process
+    }    /**
+     * Start monitoring a report generation process with baseline memory capture
      */
     public Timer.Sample startReportGeneration(String reportId, int expectedEmployees, int expectedPages) {
         activeReportsGauge.incrementAndGet();
@@ -62,15 +65,43 @@ public class ActuatorPerformanceMonitor {
         data.startTime = LocalDateTime.now();
         data.expectedEmployees = expectedEmployees;
         data.expectedPages = expectedPages;
-        data.startMemorySnapshot = captureDetailedMemorySnapshot();
+        data.baselineMemorySnapshot = captureDetailedMemorySnapshot(); // Clean baseline
+        data.startMemorySnapshot = data.baselineMemorySnapshot; // Same as baseline initially
         
-        reportMetrics.put(reportId, data);
-        memoryTimeSeries.put(reportId, new ArrayList<>());
+        reportMetrics.put(reportId, data);        memoryTimeSeries.put(reportId, new ArrayList<>());
         
-        // Record initial memory snapshot
-        recordMemorySnapshot(reportId, "Generation Start");
+        // Record baseline memory snapshot
+        recordMemorySnapshot(reportId, "Baseline");
         
         return Timer.start(meterRegistry);
+    }
+
+    /**
+     * Record memory snapshot specifically before data loading begins
+     */
+    public void recordDataProcessingStart(String reportId) {
+        recordMemorySnapshot(reportId, "Before Data Loading");
+    }
+
+    /**
+     * Record memory snapshot after data loading but before PDF generation
+     */
+    public void recordDataProcessingComplete(String reportId) {
+        recordMemorySnapshot(reportId, "Data Loading Complete");
+    }
+
+    /**
+     * Record memory snapshot before PDF generation starts
+     */
+    public void recordPdfGenerationStart(String reportId) {
+        recordMemorySnapshot(reportId, "Before PDF Generation");
+    }
+
+    /**
+     * Record memory snapshot after PDF generation completes
+     */
+    public void recordPdfGenerationComplete(String reportId) {
+        recordMemorySnapshot(reportId, "PDF Generation Complete");
     }
 
     /**
@@ -88,17 +119,12 @@ public class ActuatorPerformanceMonitor {
     }    /**
      * Complete report generation monitoring
      */    public DetailedPerformanceReport completeReportGeneration(Timer.Sample timerSample, String reportId, 
-                                                             int actualPages, long fileSizeBytes) {
-        // Stop timer and CAPTURE the actual measured duration in NANOSECONDS
+                                                             int actualPages, long fileSizeBytes) {        // Stop timer and CAPTURE the actual measured duration in NANOSECONDS
         long actualDurationNanos = timerSample.stop(reportGenerationTimer);
         reportsGeneratedCounter.increment();
         activeReportsGauge.decrementAndGet();
         
-        // Debug: Print the raw timer measurement
-        System.out.println("DEBUG Timer Measurement:");
-        System.out.println("  Raw nanoseconds: " + actualDurationNanos);
-        System.out.println("  Converted to milliseconds: " + (actualDurationNanos / 1_000_000));
-        System.out.println("  Converted to seconds: " + (actualDurationNanos / 1_000_000_000.0));
+        logger.debug("Timer measurement for {}: {}ms", reportId, actualDurationNanos / 1_000_000);
         
         ReportPerformanceData data = reportMetrics.get(reportId);
         if (data != null) {
@@ -212,23 +238,81 @@ public class ActuatorPerformanceMonitor {
         report.fileSizeBytes = data.fileSizeBytes;
         
         report.startMemorySnapshot = data.startMemorySnapshot;
-        report.endMemorySnapshot = data.endMemorySnapshot;
-        report.memoryTimeSeries = snapshots != null ? new ArrayList<>(snapshots) : new ArrayList<>();
-          // Calculate comprehensive memory delta (heap + non-heap)
-        if (data.startMemorySnapshot != null && data.endMemorySnapshot != null) {
-            long startTotal = data.startMemorySnapshot.heapUsedMB + data.startMemorySnapshot.nonHeapUsedMB;
+        report.endMemorySnapshot = data.endMemorySnapshot;        report.memoryTimeSeries = snapshots != null ? new ArrayList<>(snapshots) : new ArrayList<>();            // Calculate comprehensive memory deltas with granular breakdown
+        if (data.baselineMemorySnapshot != null && data.endMemorySnapshot != null && snapshots != null) {
+            long baselineTotal = data.baselineMemorySnapshot.heapUsedMB + data.baselineMemorySnapshot.nonHeapUsedMB;
             long endTotal = data.endMemorySnapshot.heapUsedMB + data.endMemorySnapshot.nonHeapUsedMB;
-            report.memoryDeltaMB = endTotal - startTotal;
             
-            // Debug: Print memory calculation details
-            System.out.println("DEBUG Memory Calculation:");
-            System.out.println("  Start: Heap=" + data.startMemorySnapshot.heapUsedMB + "MB, NonHeap=" + data.startMemorySnapshot.nonHeapUsedMB + "MB, Total=" + startTotal + "MB");
-            System.out.println("  End: Heap=" + data.endMemorySnapshot.heapUsedMB + "MB, NonHeap=" + data.endMemorySnapshot.nonHeapUsedMB + "MB, Total=" + endTotal + "MB");
-            System.out.println("  Delta: " + report.memoryDeltaMB + "MB");
+            // Total memory delta from clean baseline
+            report.memoryDeltaMB = endTotal - baselineTotal;
+            
+            // ENHANCED: Calculate peak memory usage
+            long peakMemoryUsage = snapshots.stream()
+                .mapToLong(snapshot -> snapshot.memoryUsage.heapUsedMB + snapshot.memoryUsage.nonHeapUsedMB)
+                .max()
+                .orElse(baselineTotal);
+            report.peakMemoryDeltaMB = peakMemoryUsage - baselineTotal;
+            
+            // Find specific phase memory usage
+            MemorySnapshot dataLoadingComplete = findSnapshotByPhase(snapshots, "Data Loading Complete");
+            MemorySnapshot pdfGenerationComplete = findSnapshotByPhase(snapshots, "PDF Generation Complete");
+            
+            if (dataLoadingComplete != null) {
+                long dataLoadingTotal = dataLoadingComplete.memoryUsage.heapUsedMB + dataLoadingComplete.memoryUsage.nonHeapUsedMB;
+                report.dataProcessingMemoryMB = dataLoadingTotal - baselineTotal;
+            }
+            
+            if (pdfGenerationComplete != null && dataLoadingComplete != null) {
+                long pdfGenTotal = pdfGenerationComplete.memoryUsage.heapUsedMB + pdfGenerationComplete.memoryUsage.nonHeapUsedMB;
+                long dataLoadingTotal = dataLoadingComplete.memoryUsage.heapUsedMB + dataLoadingComplete.memoryUsage.nonHeapUsedMB;
+                report.pdfGenerationMemoryMB = pdfGenTotal - dataLoadingTotal;
+            }
+              // Estimate framework overhead (any memory not accounted for by data + PDF)
+            report.frameworkOverheadMB = report.memoryDeltaMB - report.dataProcessingMemoryMB - report.pdfGenerationMemoryMB;
+            
+            // Memory calculation details for analysis
+            logger.debug("Memory Analysis for {}: Baseline: {}MB, Final: {}MB, Delta: {}MB", 
+                reportId, baselineTotal, endTotal, report.memoryDeltaMB);
+        } else {
+            // Fallback to original calculation if baseline not available
+            if (data.startMemorySnapshot != null && data.endMemorySnapshot != null) {
+                long startTotal = data.startMemorySnapshot.heapUsedMB + data.startMemorySnapshot.nonHeapUsedMB;
+                long endTotal = data.endMemorySnapshot.heapUsedMB + data.endMemorySnapshot.nonHeapUsedMB;                report.memoryDeltaMB = endTotal - startTotal;
+                
+                logger.debug("Memory Calculation (Fallback): Start={}MB, End={}MB, Delta={}MB", 
+                    startTotal, endTotal, report.memoryDeltaMB);
+            }
+        }
+        
+        // ENHANCED: Calculate throughput metrics
+        if (report.durationMs > 0) {
+            double durationSec = report.durationMs / 1000.0;
+            
+            if (report.actualPages > 0) {
+                report.pagesPerSecond = report.actualPages / durationSec;
+            }
+            
+            if (report.fileSizeBytes > 0) {
+                report.mbPerSecond = (report.fileSizeBytes / (1024.0 * 1024.0)) / durationSec;
+            }
+            
+            if (data.expectedEmployees > 0) {
+                report.employeesPerSecond = data.expectedEmployees / durationSec;
+            }
         }
         
         return report;
-    }    // Data classes
+    }    /**
+     * Helper method to find a memory snapshot by phase name
+     */
+    private static MemorySnapshot findSnapshotByPhase(List<MemorySnapshot> snapshots, String phaseName) {
+        return snapshots.stream()
+                .filter(snapshot -> phaseName.equals(snapshot.phase))
+                .findFirst()
+                .orElse(null);
+    }
+
+    // Data classes
     public static class ReportPerformanceData {
         String reportId;
         LocalDateTime startTime;
@@ -238,6 +322,7 @@ public class ActuatorPerformanceMonitor {
         int expectedPages;
         int actualPages;
         long fileSizeBytes;
+        MemoryMetrics baselineMemorySnapshot; // Clean baseline memory before any processing
         MemoryMetrics startMemorySnapshot;
         MemoryMetrics endMemorySnapshot;
     }
@@ -271,9 +356,7 @@ public class ActuatorPerformanceMonitor {
             return String.format("Connections - Active: %d, Idle: %d, Total: %d", 
                     activeConnections, idleConnections, totalConnections);
         }
-    }
-
-    public static class DetailedPerformanceReport {
+    }    public static class DetailedPerformanceReport {
         public String reportId;
         public LocalDateTime startTime;
         public LocalDateTime endTime;
@@ -282,9 +365,78 @@ public class ActuatorPerformanceMonitor {
         public int expectedPages;
         public int actualPages;
         public long fileSizeBytes;
-        public long memoryDeltaMB;
+        public long memoryDeltaMB; // Total memory delta (includes framework overhead)
+        public long dataProcessingMemoryMB; // Memory used specifically for report data processing
+        public long pdfGenerationMemoryMB; // Memory used specifically for PDF generation
+        public long frameworkOverheadMB; // Estimated framework/JVM overhead
+        
+        // ENHANCED PRECISION METRICS
+        public long peakMemoryDeltaMB; // Peak memory usage above baseline
+        public double pagesPerSecond; // Pages generated per second
+        public double mbPerSecond; // Data processing speed in MB/second
+        public double employeesPerSecond; // Employee processing throughput
+        
         public MemoryMetrics startMemorySnapshot;
         public MemoryMetrics endMemorySnapshot;
         public List<MemorySnapshot> memoryTimeSeries = new ArrayList<>();
+    }
+    
+    /**
+     * Get stored performance data for a completed report
+     */
+    public DetailedPerformanceReport getStoredPerformanceReport(String reportId) {
+        ReportPerformanceData data = reportMetrics.get(reportId);
+        if (data == null) {
+            return null;
+        }
+        
+        // Create a minimal performance report with available data
+        DetailedPerformanceReport report = new DetailedPerformanceReport();
+        report.reportId = reportId;
+        report.durationMs = data.endTime != null && data.startTime != null ? 
+            Duration.between(data.startTime, data.endTime).toMillis() : 0;
+        
+        // Calculate memory metrics from snapshots if available
+        calculateDetailedMemoryMetrics(data, report);
+        
+        return report;
+    }
+    
+    /**
+     * Calculate detailed memory metrics for the report
+     */
+    private void calculateDetailedMemoryMetrics(ReportPerformanceData data, DetailedPerformanceReport report) {
+        if (data.baselineMemorySnapshot != null && data.endMemorySnapshot != null) {
+            long baselineTotal = data.baselineMemorySnapshot.heapUsedMB + data.baselineMemorySnapshot.nonHeapUsedMB;
+            long endTotal = data.endMemorySnapshot.heapUsedMB + data.endMemorySnapshot.nonHeapUsedMB;
+            
+            // Total memory delta from clean baseline
+            report.memoryDeltaMB = endTotal - baselineTotal;
+            
+            // Find specific phase memory usage
+            MemorySnapshot dataLoadingComplete = findSnapshotByPhase(memoryTimeSeries.get(data.reportId), "Data Loading Complete");
+            MemorySnapshot pdfGenerationComplete = findSnapshotByPhase(memoryTimeSeries.get(data.reportId), "PDF Generation Complete");
+            
+            if (dataLoadingComplete != null) {
+                long dataLoadingTotal = dataLoadingComplete.memoryUsage.heapUsedMB + dataLoadingComplete.memoryUsage.nonHeapUsedMB;
+                report.dataProcessingMemoryMB = dataLoadingTotal - baselineTotal;
+            }
+            
+            if (pdfGenerationComplete != null && dataLoadingComplete != null) {
+                long pdfGenTotal = pdfGenerationComplete.memoryUsage.heapUsedMB + pdfGenerationComplete.memoryUsage.nonHeapUsedMB;
+                long dataLoadingTotal = dataLoadingComplete.memoryUsage.heapUsedMB + dataLoadingComplete.memoryUsage.nonHeapUsedMB;
+                report.pdfGenerationMemoryMB = pdfGenTotal - dataLoadingTotal;
+            }
+            
+            // Estimate framework overhead (any memory not accounted for by data + PDF)
+            report.frameworkOverheadMB = report.memoryDeltaMB - report.dataProcessingMemoryMB - report.pdfGenerationMemoryMB;
+        } else {
+            // Fallback to original calculation if baseline not available
+            if (data.startMemorySnapshot != null && data.endMemorySnapshot != null) {
+                long startTotal = data.startMemorySnapshot.heapUsedMB + data.startMemorySnapshot.nonHeapUsedMB;
+                long endTotal = data.endMemorySnapshot.heapUsedMB + data.endMemorySnapshot.nonHeapUsedMB;
+                report.memoryDeltaMB = endTotal - startTotal;
+            }
+        }
     }
 }

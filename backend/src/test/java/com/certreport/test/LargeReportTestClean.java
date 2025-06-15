@@ -22,14 +22,14 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Large-Scale PostgreSQL Performance Test
+ * Large Report Performance Test
  * Tests memory efficiency and performance for generating 100+ page reports
  * Uses PostgreSQL test database for realistic performance measurements
- * Now uses DatabaseTestEnvironmentManager for proper test isolation and SQL-based test data
+ * Now uses TestIsolationManager for proper test isolation and SQL-based test data
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("postgres-test")
-public class PostgreSQLLargeScalePerformanceTest {
+public class LargeReportTestClean {
 
     @Autowired
     private ReportService reportService;
@@ -39,19 +39,32 @@ public class PostgreSQLLargeScalePerformanceTest {
     
     @Autowired
     private ActuatorPerformanceMonitor actuatorPerformanceMonitor;
-      @Autowired
-    private DatabaseTestEnvironmentManager databaseTestEnvironmentManager;
     
     @Autowired
-    private ReportRepository reportRepository;    @BeforeEach
-    public void setUp() {        // Ensure clean test environment and create test data
-        databaseTestEnvironmentManager.ensureCleanEnvironment();
-        databaseTestEnvironmentManager.ensurePerformanceTestData();
+    private TestIsolationManager testIsolationManager;
+    
+    @Autowired
+    private ReportRepository reportRepository;
+
+    @BeforeEach
+    public void setUp() {
+        // Ensure clean test environment and create test data
+        testIsolationManager.ensureCleanEnvironment();
+        testIsolationManager.ensurePerformanceTestData();
+        
+        // Force garbage collection before test
+        System.gc();
+        try {
+            Thread.sleep(1000); // Allow GC to complete
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @AfterEach
-    public void tearDown() {        // Clean up after test to prevent contamination
-        databaseTestEnvironmentManager.cleanup();
+    public void tearDown() {
+        // Clean up after test to prevent contamination
+        testIsolationManager.cleanup();
     }
 
     @Test
@@ -59,9 +72,15 @@ public class PostgreSQLLargeScalePerformanceTest {
         System.out.println("=== LARGE REPORT GENERATION TEST (TARGET: 100+ PAGES) ===");
         System.out.println("Using SQL-optimized test data with 350 employees");
         System.out.println();
-          long totalEmployees = employeeService.getAllEmployees().size();
+        
+        long totalEmployees = employeeService.getAllEmployees().size();
         System.out.println("=== READY FOR PERFORMANCE TEST ===");
         System.out.println("- Total Employees Available: " + totalEmployees);
+        System.out.println();
+
+        // Get baseline metrics from actual services
+        long baselineMemoryMB = Runtime.getRuntime().totalMemory() / (1024 * 1024);
+        System.out.println("Baseline Memory: " + baselineMemoryMB + " MB");
         System.out.println();
         
         // Create request for ALL employees
@@ -88,17 +107,17 @@ public class PostgreSQLLargeScalePerformanceTest {
         System.out.println("- Error Message: " + completedReport.getErrorMessage());
         System.out.println("- Started At: " + completedReport.getStartedAt());
         System.out.println("- Completed At: " + completedReport.getCompletedAt());
-          // Get performance metrics from the stored performance report (if available)
-        ActuatorPerformanceMonitor.DetailedPerformanceReport performanceReport = 
-            actuatorPerformanceMonitor.getStoredPerformanceReport(completedReport.getId());
         
+        // Get performance metrics from the SAME ActuatorPerformanceMonitor used by ReportService
         ActuatorPerformanceMonitor.MemoryMetrics finalMemory = actuatorPerformanceMonitor.getDetailedMemoryMetrics();
 
         // Save report and get file size
         String reportFilePath = saveReportToFile(completedReport);
         File reportFile = new File(reportFilePath);
-        long fileSizeBytes = reportFile.length();        // Present results using stored performance data if available, otherwise use simple metrics
-        presentResults(completedReport, finalMemory, performanceReport, 
+        long fileSizeBytes = reportFile.length();
+
+        // Present results using simple metrics (real timing happened inside ReportService)
+        presentResults(completedReport, finalMemory, baselineMemoryMB, 
                       fileSizeBytes, reportFilePath, totalEmployees);
 
         // Basic assertions
@@ -116,8 +135,9 @@ public class PostgreSQLLargeScalePerformanceTest {
         System.out.println("✅ LARGE REPORT TEST COMPLETED");
         System.out.println("   - Report File: " + reportFilePath);
         System.out.println();
-    }    private Report waitForReportCompletion(String reportId, long timeoutMs) {
-        // Note: This timing is for test infrastructure timeout, not performance measurement
+    }
+
+    private Report waitForReportCompletion(String reportId, long timeoutMs) {
         long startTime = System.currentTimeMillis();
         Report report;
         
@@ -142,10 +162,12 @@ public class PostgreSQLLargeScalePerformanceTest {
         
         System.out.println("Report completed with status: " + report.getStatus());
         return report;
-    }    private void presentResults(
+    }
+
+    private void presentResults(
             Report report, 
             ActuatorPerformanceMonitor.MemoryMetrics finalMemory,
-            ActuatorPerformanceMonitor.DetailedPerformanceReport performanceReport,
+            long baselineMemoryMB,
             long fileSizeBytes,
             String filePath,
             long employeeCount) {
@@ -208,31 +230,17 @@ public class PostgreSQLLargeScalePerformanceTest {
         System.out.println("   • PDF Generation Memory: Memory used by JasperReports engine");
         System.out.println("   • Framework Overhead: Spring/Hibernate baseline (should be ~0MB)");
         System.out.println();
-          // Memory Efficiency Assessment using stored performance data
+        
+        // Memory Efficiency Assessment based on common patterns
         long fileSizeKB = fileSizeBytes / 1024;
         if (fileSizeKB > 0) {
-            double memoryPerEmployeeMB;
-            double memoryToFileSizeRatio;
+            // Estimate expected memory usage based on file size and employee count
+            double memoryPerEmployeeMB = finalMemory.heapUsedMB / employeeCount;
+            double memoryToFileSizeRatio = (finalMemory.heapUsedMB * 1024) / fileSizeKB;
             
-            if (performanceReport != null && performanceReport.memoryDeltaMB > 0) {
-                // Use accurate memory delta from performance monitoring
-                memoryPerEmployeeMB = (double) performanceReport.memoryDeltaMB / employeeCount;
-                memoryToFileSizeRatio = (performanceReport.memoryDeltaMB * 1024.0) / fileSizeKB;
-                
-                System.out.println("MEMORY EFFICIENCY INDICATORS:");
-                System.out.println("- Memory per Employee: " + String.format("%.2f", memoryPerEmployeeMB) + " MB");
-                System.out.println("- Memory:File Size Ratio: " + String.format("%.0f", memoryToFileSizeRatio) + ":1");
-                System.out.println("- Total Memory Delta: " + performanceReport.memoryDeltaMB + "MB (from performance monitoring)");
-            } else {
-                // Fallback to basic calculation if performance data unavailable
-                memoryPerEmployeeMB = finalMemory.heapUsedMB / (double) employeeCount;
-                memoryToFileSizeRatio = (finalMemory.heapUsedMB * 1024.0) / fileSizeKB;
-                
-                System.out.println("MEMORY EFFICIENCY INDICATORS:");
-                System.out.println("- Memory per Employee: " + String.format("%.2f", memoryPerEmployeeMB) + " MB (estimated from current heap)");
-                System.out.println("- Memory:File Size Ratio: " + String.format("%.0f", memoryToFileSizeRatio) + ":1");
-                System.out.println("- Note: Using fallback calculation - performance data not available");
-            }
+            System.out.println("MEMORY EFFICIENCY INDICATORS:");
+            System.out.println("- Memory per Employee: " + String.format("%.2f", memoryPerEmployeeMB) + " MB");
+            System.out.println("- Memory:File Size Ratio: " + String.format("%.0f", memoryToFileSizeRatio) + ":1");
             
             if (memoryPerEmployeeMB < 1.0) {
                 System.out.println("✅ Memory per Employee: EXCELLENT (< 1MB per employee)");
