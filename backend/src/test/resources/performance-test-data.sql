@@ -217,30 +217,16 @@ WHERE s.started_at IS NOT NULL; -- Only for started stages
 -- PERFORMANCE STATISTICS
 -- =============================================================================
 
--- Display created data statistics
-DO $$
-DECLARE
-    emp_count INTEGER;
-    cert_def_count INTEGER;
-    cert_count INTEGER;
-    stage_count INTEGER;
-    task_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO emp_count FROM employees;
-    SELECT COUNT(*) INTO cert_def_count FROM certification_definitions;
-    SELECT COUNT(*) INTO cert_count FROM certifications;
-    SELECT COUNT(*) INTO stage_count FROM stages;
-    SELECT COUNT(*) INTO task_count FROM tasks;
-    
-    RAISE NOTICE '=== PERFORMANCE TEST DATA CREATED ===';
-    RAISE NOTICE 'Employees: %', emp_count;
-    RAISE NOTICE 'Certification Definitions: %', cert_def_count;
-    RAISE NOTICE 'Active Certifications: %', cert_count;
-    RAISE NOTICE 'Active Stages: %', stage_count;
-    RAISE NOTICE 'Active Tasks: %', task_count;
-    RAISE NOTICE 'Expected Report Pages: %+', (emp_count * 3);
-    RAISE NOTICE '=====================================';
-END $$;
+-- Performance test data creation completed
+-- Expected data counts:
+-- - Employees: 350
+-- - Certification Definitions: 12
+-- - Stage Definitions: 60 (5 per certification)
+-- - Task Definitions: 300 (5 per stage)
+-- - Active Certifications: ~1,400 (4 per employee average)
+-- - Active Stages: ~7,000 (5 per certification average)
+-- - Active Tasks: ~35,000 (5 per stage average)
+-- - Expected Report Pages: 1,000+ (3+ per employee)
 
 -- Update table statistics for query optimizer
 ANALYZE employees;

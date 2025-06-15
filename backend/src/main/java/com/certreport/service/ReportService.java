@@ -7,10 +7,10 @@ import com.certreport.dto.CertificationDto;
 import com.certreport.dto.EmployeeCertificationActivityDto;
 import com.certreport.model.Report;
 import com.certreport.repository.ReportRepository;
+import com.certreport.config.PdfGenerationProperties;
 import io.micrometer.core.instrument.Timer;
 import net.sf.jasperreports.engine.*;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -26,32 +26,25 @@ import java.util.stream.Collectors;
 
 @Service
 public class ReportService {
+      private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
     
-    private static final Logger logger = LoggerFactory.getLogger(ReportService.class);    // Configuration properties for memory-efficient processing
-    @Value("${report.pdf.memory-efficient.enabled:true}")
-    private boolean memoryEfficientPdfEnabled;
-    
-    @Value("${report.pdf.memory-efficient.threshold-mb:150}")
-    private int memoryThresholdMb;
-    
-    @Value("${report.generation.chunk.size:50}")
-    private int reportGenerationChunkSize;
+    private final PdfGenerationProperties pdfProperties;
       private final ReportRepository reportRepository;
     private final EmployeeService employeeService;
     private final CertificationService certificationService;
     private final ActuatorPerformanceMonitor actuatorPerformanceMonitor;
-    private final MemoryEfficientPdfGenerationService memoryEfficientPdfGenerationService;
-
-    public ReportService(ReportRepository reportRepository, 
+    private final MemoryEfficientPdfGenerationService memoryEfficientPdfGenerationService;    public ReportService(ReportRepository reportRepository, 
                         EmployeeService employeeService,
                         CertificationService certificationService,
                         ActuatorPerformanceMonitor actuatorPerformanceMonitor,
-                        MemoryEfficientPdfGenerationService memoryEfficientPdfGenerationService) {
+                        MemoryEfficientPdfGenerationService memoryEfficientPdfGenerationService,
+                        PdfGenerationProperties pdfProperties) {
         this.reportRepository = reportRepository;
         this.employeeService = employeeService;
         this.certificationService = certificationService;
         this.actuatorPerformanceMonitor = actuatorPerformanceMonitor;
         this.memoryEfficientPdfGenerationService = memoryEfficientPdfGenerationService;
+        this.pdfProperties = pdfProperties;
     }
 
     public Report generateReport(ReportRequestDto request) {
@@ -168,7 +161,7 @@ public class ReportService {
      * Intelligently selects PDF generation approach based on memory constraints.
      * Falls back to traditional approach if memory-efficient processing is disabled or fails.
      */
-    private String generateMemoryConstrainedCertificationsPdfReport(List<CompleteReportDataDto> reportData, String reportId) throws Exception {        if (!memoryEfficientPdfEnabled) {
+    private String generateMemoryConstrainedCertificationsPdfReport(List<CompleteReportDataDto> reportData, String reportId) throws Exception {        if (!pdfProperties.isEnabled()) {
             logger.info("Memory-efficient PDF processing disabled, using traditional approach");
             return generateCertificationsPdfReport(reportData, reportId);
         }
@@ -177,7 +170,7 @@ public class ReportService {
         Runtime runtime = Runtime.getRuntime();
         long estimatedMemoryUsage = reportData.size() * 580_000; // ~580KB per employee (from analysis)
         long availableMemory = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory());
-          if (estimatedMemoryUsage > memoryThresholdMb * 1024 * 1024 || availableMemory < estimatedMemoryUsage * 2) {
+          if (estimatedMemoryUsage > pdfProperties.getThresholdMb() * 1024 * 1024 || availableMemory < estimatedMemoryUsage * 2) {
             logger.info("Using memory-efficient PDF generation due to memory constraints. Estimated: {}MB, Available: {}MB", 
                        estimatedMemoryUsage / (1024 * 1024), availableMemory / (1024 * 1024));
             

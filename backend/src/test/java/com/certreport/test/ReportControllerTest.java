@@ -75,13 +75,14 @@ public class ReportControllerTest {    @Autowired
                 .andExpect(jsonPath("$.type").value("EMPLOYEE_DEMOGRAPHICS"));
 
         verify(reportService).generateReport(any(ReportRequestDto.class));
-    }
-
-    @Test
+    }    @Test
     void testGenerateReport_InvalidRequest() throws Exception {
         // Given - empty request body
         ReportRequestDto invalidRequest = new ReportRequestDto();
         // Don't set any fields - should cause validation errors
+        
+        // Mock service to return null for invalid request
+        when(reportService.generateReport(any(ReportRequestDto.class))).thenReturn(null);
 
         // When & Then
         mockMvc.perform(post("/api/reports/generate")

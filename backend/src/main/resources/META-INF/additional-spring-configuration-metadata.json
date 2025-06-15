@@ -1,0 +1,28 @@
+{
+  "properties": [
+    {
+      "name": "report.pdf.memory-efficient.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable memory-efficient PDF generation mode for large reports",
+      "defaultValue": true
+    },
+    {
+      "name": "report.pdf.memory-efficient.threshold-mb",
+      "type": "java.lang.Integer",
+      "description": "Memory threshold in MB above which memory-efficient mode is automatically enabled",
+      "defaultValue": 150
+    },
+    {
+      "name": "report.pdf.memory-efficient.chunk-size",
+      "type": "java.lang.Integer",
+      "description": "Number of items to process per chunk in memory-efficient mode",
+      "defaultValue": 50
+    },
+    {
+      "name": "report.pdf.memory-efficient.gc-frequency",
+      "type": "java.lang.Integer",
+      "description": "Frequency of garbage collection suggestion during memory-efficient processing",
+      "defaultValue": 5
+    }
+  ]
+}

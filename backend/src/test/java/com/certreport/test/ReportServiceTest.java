@@ -7,6 +7,8 @@ import com.certreport.service.ReportService;
 import com.certreport.service.EmployeeService;
 import com.certreport.service.CertificationService;
 import com.certreport.service.ActuatorPerformanceMonitor;
+import com.certreport.service.MemoryEfficientPdfGenerationService;
+import com.certreport.config.PdfGenerationProperties;
 import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,11 +37,19 @@ public class ReportServiceTest {
     private ReportRepository reportRepository;
 
     @Mock
-    private EmployeeService employeeService;    @Mock
+    private EmployeeService employeeService;
+
+    @Mock
     private CertificationService certificationService;
 
     @Mock
     private ActuatorPerformanceMonitor actuatorPerformanceMonitor;
+
+    @Mock
+    private MemoryEfficientPdfGenerationService memoryEfficientPdfGenerationService;
+
+    @Mock
+    private PdfGenerationProperties pdfProperties;
 
     @InjectMocks
     private ReportService reportService;
@@ -55,7 +65,21 @@ public class ReportServiceTest {
 
         testRequest = new ReportRequestDto();
         testRequest.setEmployeeIds(Arrays.asList("EMP001", "EMP002"));
-        testRequest.setReportType("EMPLOYEE_DEMOGRAPHICS");        // Mock the dependencies for async processing
+        testRequest.setReportType("EMPLOYEE_DEMOGRAPHICS");
+
+        // Mock PDF generation properties
+        when(pdfProperties.isEnabled()).thenReturn(true);
+        when(pdfProperties.getThresholdMb()).thenReturn(150);
+        when(pdfProperties.getChunkSize()).thenReturn(50);
+        when(pdfProperties.getGcFrequency()).thenReturn(5);
+
+        // Mock repository findById for all test report IDs to reduce log noise
+        when(reportRepository.findById("REP001")).thenReturn(Optional.of(testReport));
+        when(reportRepository.findById("REP002")).thenReturn(Optional.of(testReport));
+        when(reportRepository.findById("REP003")).thenReturn(Optional.of(testReport));
+        when(reportRepository.findById("REP004")).thenReturn(Optional.of(testReport));
+
+        // Mock the dependencies for async processing
         Timer.Sample mockSample = mock(Timer.Sample.class);
         when(actuatorPerformanceMonitor.startReportGeneration(anyString(), anyInt(), anyInt())).thenReturn(mockSample);
         

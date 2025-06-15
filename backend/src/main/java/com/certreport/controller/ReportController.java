@@ -27,13 +27,17 @@ public class ReportController {
     public ReportController(ReportService reportService, ReportCleanupService reportCleanupService) {
         this.reportService = reportService;
         this.reportCleanupService = reportCleanupService;
-    }    @PostMapping("/generate")
-    public ResponseEntity<Report> generateReport(@RequestBody ReportRequestDto request) {
+    }    @PostMapping("/generate")    public ResponseEntity<Report> generateReport(@RequestBody ReportRequestDto request) {
         logger.info("Received report generation request: reportType={}, employeeIds={}", 
                    request.getReportType(), request.getEmployeeIds());
         try {
             // Create report and start async processing
             Report initialReport = reportService.generateReport(request);
+            
+            if (initialReport == null) {
+                logger.error("Report generation failed - service returned null");
+                return ResponseEntity.badRequest().build();
+            }
             
             logger.info("Created initial report with ID: {}", initialReport.getId());
             return ResponseEntity.ok(initialReport);
@@ -41,7 +45,7 @@ public class ReportController {
             logger.error("Error generating report", e);
             return ResponseEntity.badRequest().build();
         }
-    }    @GetMapping("/{id}/status")
+    }@GetMapping("/{id}/status")
     public ResponseEntity<ReportStatusResponse> getReportStatus(@PathVariable String id) {
         try {
             Report report = reportService.getReportStatus(id);

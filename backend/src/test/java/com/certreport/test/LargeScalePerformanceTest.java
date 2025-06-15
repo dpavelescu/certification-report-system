@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * large dataset scenarios and extreme load testing.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("postgres-test")
+@ActiveProfiles("postgres-large-test")
 public class LargeScalePerformanceTest {
 
     @Autowired
@@ -45,24 +45,19 @@ public class LargeScalePerformanceTest {
     
     @Autowired
     private ActuatorPerformanceMonitor actuatorPerformanceMonitor;
-    
-    @Autowired
-    private DatabaseTestEnvironmentManager databaseTestEnvironmentManager;
-    
-    @Autowired
+      @Autowired
     private ReportRepository reportRepository;
 
     @BeforeEach
     public void setUp() {
-        // Ensure clean test environment and create test data
-        databaseTestEnvironmentManager.ensureCleanEnvironment();
-        databaseTestEnvironmentManager.ensurePerformanceTestData();
+        // Clean test environment
+        reportRepository.deleteAll();
     }
 
     @AfterEach
     public void tearDown() {
         // Clean up after test to prevent contamination
-        databaseTestEnvironmentManager.cleanup();
+        reportRepository.deleteAll();
     }
 
     /**

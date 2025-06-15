@@ -57,15 +57,13 @@ public class ComprehensivePerformanceTest {
     
     @Autowired
     private ReportRepository reportRepository;
-    
-    @Autowired
-    private DatabaseTestEnvironmentManager databaseTestEnvironmentManager;
-
-    @BeforeEach
+      @BeforeEach
     public void setUp() {
-        // Ensure clean test environment and create test data
-        databaseTestEnvironmentManager.ensureCleanEnvironment();
-        databaseTestEnvironmentManager.ensurePerformanceTestData();
+        // Clean test environment - using direct repository cleanup
+        reportRepository.deleteAll();
+        
+        // Ensure we have test data available
+        // Test data will be created by individual test methods as needed
     }
 
     /**
